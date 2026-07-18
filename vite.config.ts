@@ -6,7 +6,8 @@ import tailwindcss from '@tailwindcss/vite'
 // https://vite.dev/config/
 export default defineConfig({
   server: {
-    port: 3020,
+    allowedHosts: ['operator.signaweb.ca'],
+    port: 3050,
   },
   plugins: [react(), tailwindcss()],
   resolve: {

@@ -23,3 +23,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Clés Supabase/Mapbox fournies via .input (ne pas committer)
+.input/supabase
