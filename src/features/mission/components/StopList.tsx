@@ -1,18 +1,13 @@
 import { AnimatePresence } from 'motion/react'
 import { StopRow } from './StopRow'
-import type { MissionPhase, Stop } from '../domain/types'
+import type { Stop } from '../domain/types'
 
-type StopListProps = {
-  stops: Stop[]
-  phase: MissionPhase
-}
-
-export function StopList({ stops, phase }: StopListProps) {
+export function StopList({ stops }: { stops: Stop[] }) {
   return (
     <ul className="flex flex-col gap-2">
       <AnimatePresence initial={false}>
         {stops.map((stop) => (
-          <StopRow key={stop.ordre} stop={stop} phase={phase} />
+          <StopRow key={stop.ordre} stop={stop} />
         ))}
       </AnimatePresence>
     </ul>

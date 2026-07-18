@@ -11,13 +11,6 @@ const EARTH_RADIUS_M = 6_371_000
  *  d'une distance à vol d'oiseau. Configurable — pas de service de routing. */
 export const ASSUMED_SPEED_KMH = 30
 
-/** Seuil d'ETA (minutes) sous lequel un stop passe EN_APPROCHE. */
-export const APPROACH_ETA_MINUTES = 10
-
-/** Rayon d'arrivée (mètres) : sous ce seuil, un stop deviendra EN_COURS.
- *  Prévu pour un prochain sprint — non branché dans le moteur. */
-export const ARRIVAL_RADIUS_METERS = 20
-
 function toRadians(degrees: number): number {
   return (degrees * Math.PI) / 180
 }
@@ -42,6 +35,11 @@ export function estimateEtaMinutes(
   if (speedKmh <= 0) return Infinity
   const metersPerMinute = (speedKmh * 1000) / 60
   return distanceMeters / metersPerMinute
+}
+
+/** Convertit une vitesse m/s (GPS) en km/h. `null` → 0. */
+export function metersPerSecondToKmh(mps: number | null): number {
+  return mps !== null && Number.isFinite(mps) && mps > 0 ? mps * 3.6 : 0
 }
 
 export type NearestStop = {

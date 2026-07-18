@@ -1,4 +1,5 @@
 import type { MissionStatus } from './status'
+import type { ProblemCode } from './problemCodes'
 
 /** Coordonnée géographique simple. */
 export type LatLng = {
@@ -10,6 +11,8 @@ export type LatLng = {
 export type GpsPosition = LatLng & {
   accuracy: number
   timestamp: number
+  /** Vitesse en m/s (`coords.speed`), ou null si l'appareil ne la fournit pas. */
+  speed: number | null
 }
 
 /**
@@ -30,6 +33,8 @@ export type Stop = {
   etaMinutes: number | null
   /** Heure de complétion (ms epoch) pour les stops TERMINE. */
   completedAt: number | null
+  /** Code problème sélectionné si le stop est NON_TERMINE. */
+  problemCode: ProblemCode | null
 }
 
 /** Phase globale de la mission, pilotée par les commandes Play / Pause / Stop. */

@@ -36,6 +36,30 @@
   de reca-operator → conservé verbatim comme convention, la structure réelle vit dans
   `file-index.md`.
 
+### Sprint 003 — Automatisation intelligente des interventions ✅
+
+- **Objectif** : transformer l'écran en assistant autonome piloté par le GPS ; extraire
+  TOUTE la logique dans un service `MissionEngine` **hors React** ; machine à états réelle,
+  compteur intelligent, journal des temps, modale 8 codes, mode développement.
+- **Décisions client** : statut problème = `NON_TERMINE` (pas `A_REFAIRE`) ; portée =
+  « logique + écran principal » (nav basse Carte/Menu et Fiche résidence détaillée reportées).
+- **Étapes** : (1) domaine — `config.ts` (constantes réglables), `problemCodes.ts`, `log.ts`,
+  extension `status.ts` (EN_ROUTE/DEPART/NON_TERMINE), `types.ts` (speed, problemCode),
+  `geo.ts` (retrait ARRIVAL_RADIUS/APPROACH_ETA, ajout `metersPerSecondToKmh`), `format.ts`
+  (`formatStopwatch`, `splitAddress`). (2) `engine/MissionEngine.ts` (classe pure, horloge
+  virtuelle, machine à états, snapshot+subscribe). (3) `useMissionEngine` → adaptateur mince ;
+  `useGeolocation` capte la vitesse ; simulateur `?sim=1` enrichi. (4) UI :
+  `SmartCounter`, `CurrentMissionCard`, `ProblemModal`, `DevControlBar`, `statusTone.ts` ;
+  refonte `StopRow`/`StopList`/`StopListHeader` ; réécriture `MissionPage` ; suppression de
+  `MissionHeader`/`MissionCard`/`MissionFooter`/`TransportControls`.
+- **Fichiers** : voir `file-index.md` (module Mission mis à jour).
+- **Risques** : accès aux refs pendant le rendu (règle `react-hooks/refs`) → engine en
+  `useState` paresseux + chargement en `useEffect` ; init statique TS2729 → `EMPTY_SNAPSHOT` au
+  niveau module ; TS strict `verbatimModuleSyntax` → `import type`.
+- **Résultat** : `tsc -b` OK, `eslint` OK ; cycle complet + chemin Problème vérifiés headless
+  (tsx) sur le vrai moteur (délais ~30 s respectés, TERMINE retiré, NON_TERMINE conservé,
+  journal des durées correct).
+
 ---
 
 ## Actifs

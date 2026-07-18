@@ -1,10 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
+import { haversineMeters } from '../domain/geo'
 import type { GpsPosition } from '../domain/types'
 
 type GeolocationState = {
   position: GpsPosition | null
   error: string | null
   isSupported: boolean
+}
+
+/**
+ * Vitesse dérivée (m/s) de deux positions successives quand l'appareil ne
+ * fournit pas `coords.speed`. Retourne null si indéterminable.
+ */
+function deriveSpeed(prev: GpsPosition | null, pos: GeolocationPosition): number | null {
+  if (!prev) return null
+  const dtSeconds = (pos.timestamp - prev.timestamp) / 1000
+  if (dtSeconds <= 0) return null
+  const meters = haversineMeters(prev, { lat: pos.coords.latitude, lng: pos.coords.longitude })
+  return meters / dtSeconds
 }
 
 /**
@@ -17,18 +30,22 @@ export function useGeolocation(enabled: boolean): GeolocationState {
   const [position, setPosition] = useState<GpsPosition | null>(null)
   const [error, setError] = useState<string | null>(null)
   const watchIdRef = useRef<number | null>(null)
+  const lastRef = useRef<GpsPosition | null>(null)
 
   useEffect(() => {
     if (!enabled || !isSupported) return
 
     const handleSuccess = (pos: GeolocationPosition) => {
       setError(null)
-      setPosition({
+      const next: GpsPosition = {
         lat: pos.coords.latitude,
         lng: pos.coords.longitude,
         accuracy: pos.coords.accuracy,
         timestamp: pos.timestamp,
-      })
+        speed: pos.coords.speed ?? deriveSpeed(lastRef.current, pos),
+      }
+      lastRef.current = next
+      setPosition(next)
     }
 
     const handleError = (err: GeolocationPositionError) => {

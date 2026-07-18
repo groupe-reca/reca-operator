@@ -1,185 +1,132 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { loadDemoMission } from '../services/routeCsv'
 import { useGeolocation } from './useGeolocation'
-import {
-  APPROACH_ETA_MINUTES,
-  ARRIVAL_RADIUS_METERS,
-  estimateEtaMinutes,
-  haversineMeters,
-} from '../domain/geo'
-import type { GpsPosition, Mission, MissionPhase, Stop } from '../domain/types'
-import type { MissionStatus } from '../domain/status'
-
-/** Ordre de tri des statuts dans la liste : prochaine → en approche → terminées. */
-const STATUS_ORDER: Record<MissionStatus, number> = {
-  EN_COURS: 0,
-  EN_APPROCHE: 1,
-  EN_ATTENTE: 2,
-  PAUSE: 2,
-  ARRET: 2,
-  TERMINE: 3,
-}
-
-/** Clé de tri secondaire (au sein d'un même statut). */
-export type SecondarySort = 'ordre' | 'distance'
-
-function sortStops(stops: Stop[], secondary: SecondarySort): Stop[] {
-  return [...stops].sort((a, b) => {
-    const byStatus = STATUS_ORDER[a.status] - STATUS_ORDER[b.status]
-    if (byStatus !== 0) return byStatus
-    if (secondary === 'distance') {
-      const da = a.distanceMeters ?? Number.POSITIVE_INFINITY
-      const db = b.distanceMeters ?? Number.POSITIVE_INFINITY
-      if (da !== db) return da - db
-    }
-    return a.ordre - b.ordre
-  })
-}
-
-function resetStops(stops: Stop[]): Stop[] {
-  return stops.map((stop) => ({
-    ...stop,
-    status: 'EN_ATTENTE' as MissionStatus,
-    distanceMeters: null,
-    etaMinutes: null,
-    completedAt: null,
-  }))
-}
+import { MissionEngine } from '../engine/MissionEngine'
+import { haversineMeters } from '../domain/geo'
+import { DEV_CONTROLS } from '../domain/config'
+import type { GpsPosition, LatLng } from '../domain/types'
+import type { ProblemCode } from '../domain/problemCodes'
 
 /**
- * Recalcule distance / ETA / statut de chaque stop à partir de la position
- * courante. Ne touche pas aux stops déjà TERMINE / EN_COURS (l'arrivée sera
- * gérée dans un prochain sprint — voir ARRIVAL_RADIUS_METERS).
+ * Adaptateur React **mince** autour de `MissionEngine`. Il ne contient aucune
+ * logique métier : il instancie le moteur, lui pousse la position GPS et un tick
+ * 1 s, charge la tournée, et réexpose le snapshot + les commandes. Toute la
+ * logique (machine à états, chronos, tri, journal) vit dans le moteur.
  */
-function recomputeStops(stops: Stop[], position: GpsPosition): Stop[] {
-  return stops.map((stop) => {
-    if (stop.status === 'TERMINE' || stop.status === 'EN_COURS') return stop
-    const distanceMeters = haversineMeters(position, stop)
-    const etaMinutes = estimateEtaMinutes(distanceMeters)
-    const status: MissionStatus =
-      etaMinutes <= APPROACH_ETA_MINUTES ? 'EN_APPROCHE' : 'EN_ATTENTE'
-    return { ...stop, distanceMeters, etaMinutes, status }
-  })
-}
 
-// --- Simulation GPS (dev only, activée par ?sim=1) -------------------------
-// Permet de vérifier la détection automatique sans matériel GPS : une position
-// synthétique se déplace vers le premier stop, déclenchant les EN_APPROCHE.
+// --- Simulateur GPS (dev only, ?sim=1) -------------------------------------
+// Génère une trajectoire synthétique qui parcourt tout le cycle de chaque stop :
+// convergence → arrêt sur place (approche + intervention) → éloignement rapide
+// (départ). Permet de valider la machine à états sans matériel GPS.
 const SIM_ENABLED =
   typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('sim')
-const SIM_TRAVEL_SECONDS = 90
+const SIM_STEP_METERS = 45 // déplacement par tick en mouvement
+const SIM_MOVING_SPEED_MPS = 11 // ~40 km/h (> seuil de départ)
+const SIM_INTERVENTION_SECONDS = 5 // temps « sur place » avant de repartir
 
-function simulatedPosition(target: Stop, runningSeconds: number): GpsPosition {
-  // Origine ~9 km au nord-est du premier stop, convergence linéaire vers lui.
-  const origin = { lat: target.lat + 0.06, lng: target.lng + 0.09 }
-  const t = Math.min(1, runningSeconds / SIM_TRAVEL_SECONDS)
-  return {
-    lat: origin.lat + (target.lat - origin.lat) * t,
-    lng: origin.lng + (target.lng - origin.lng) * t,
-    accuracy: 4,
-    timestamp: Date.now(),
-  }
+/** Décale un point d'environ ~250 m au nord-est (cible d'éloignement). */
+function awayTarget(to: LatLng): LatLng {
+  return { lat: to.lat + 0.002, lng: to.lng + 0.002 }
 }
 
-export function useMissionEngine(secondarySort: SecondarySort = 'ordre') {
+/** Rapproche `from` de `to` d'au plus `meters` mètres. */
+function moveToward(from: LatLng, to: LatLng, meters: number): LatLng {
+  const d = haversineMeters(from, to)
+  if (d <= meters || d === 0) return { lat: to.lat, lng: to.lng }
+  const t = meters / d
+  return { lat: from.lat + (to.lat - from.lat) * t, lng: from.lng + (to.lng - from.lng) * t }
+}
+
+type SimState = { pos: LatLng | null; enCoursSeconds: number }
+
+export type UseMissionEngineResult = ReturnType<typeof useMissionEngine>
+
+export function useMissionEngine() {
+  // Instance stable du moteur (valeur d'état paresseuse, pas un ref).
+  const [engine] = useState(() => new MissionEngine())
+
+  const snapshot = useSyncExternalStore(engine.subscribe, engine.getSnapshot)
+
+  // Chargement de la tournée (CSV statique) → moteur.
   const missionQuery = useQuery({
     queryKey: ['demo-mission'],
     queryFn: loadDemoMission,
     staleTime: Infinity,
   })
 
-  const [phase, setPhase] = useState<MissionPhase>('IDLE')
-  const [stops, setStops] = useState<Stop[]>([])
-  const [now, setNow] = useState(() => Date.now())
-
-  // Chronomètre de mission (temps total). `accumulated` = temps des segments
-  // déjà écoulés ; `runStart` = début du segment courant (null si en pause).
-  const [accumulated, setAccumulated] = useState(0)
-  const [runStart, setRunStart] = useState<number | null>(null)
-  const elapsedMs = accumulated + (runStart !== null ? Math.max(0, now - runStart) : 0)
-  const runningSeconds = runStart !== null ? Math.max(0, now - runStart) / 1000 : 0
-
-  // Initialise les stops quand la mission (ou une nouvelle mission) est chargée —
-  // pattern « ajuster l'état pendant le rendu » plutôt qu'un effet.
-  const [syncedMission, setSyncedMission] = useState<Mission | null>(null)
-  if (missionQuery.data && missionQuery.data !== syncedMission) {
-    setSyncedMission(missionQuery.data)
-    setStops(resetStops(missionQuery.data.stops))
-  }
-
-  const gpsActive = phase === 'RUNNING'
-  const geo = useGeolocation(gpsActive && !SIM_ENABLED)
-
-  // Position courante : réelle, ou simulée en mode dev.
-  const position: GpsPosition | null = useMemo(() => {
-    if (SIM_ENABLED) {
-      if (phase !== 'RUNNING' || stops.length === 0) return null
-      return simulatedPosition(stops[0], runningSeconds)
-    }
-    return geo.position
-  }, [phase, stops, runningSeconds, geo.position])
-
-  const positionRef = useRef<GpsPosition | null>(null)
+  const mission = missionQuery.data
   useEffect(() => {
-    positionRef.current = position
-  }, [position])
+    if (!mission) return
+    engine.loadMission(mission)
+    // Production (DEV_CONTROLS=false) : démarrage auto, aucune action manuelle.
+    if (!DEV_CONTROLS) engine.play()
+  }, [engine, mission])
 
-  // Tick 1 s : avance l'horloge/chrono et recalcule le GPS quand ça tourne.
+  // GPS réel (désactivé en simulation).
+  const gpsActive = snapshot.phase === 'RUNNING' && !SIM_ENABLED
+  const geo = useGeolocation(gpsActive)
+
+  useEffect(() => {
+    if (!SIM_ENABLED && geo.position) engine.updatePosition(geo.position)
+  }, [engine, geo.position])
+
+  // Tick 1 s : avance l'horloge du moteur (+ produit la position simulée).
+  const simRef = useRef<SimState>({ pos: null, enCoursSeconds: 0 })
   useEffect(() => {
     const id = window.setInterval(() => {
-      setNow(Date.now())
-      if (phase === 'RUNNING' && positionRef.current) {
-        setStops((prev) => recomputeStops(prev, positionRef.current!))
-      }
+      if (SIM_ENABLED) engine.updatePosition(nextSimPosition(engine, simRef.current))
+      engine.tick(Date.now())
     }, 1000)
     return () => window.clearInterval(id)
-  }, [phase])
-
-  const play = () => {
-    if (phase === 'IDLE' || phase === 'STOPPED') {
-      setStops((prev) => resetStops(prev))
-    }
-    setRunStart((prev) => prev ?? Date.now())
-    setPhase('RUNNING')
-  }
-
-  const pause = () => {
-    setAccumulated((prev) => (runStart !== null ? prev + (Date.now() - runStart) : prev))
-    setRunStart(null)
-    setPhase('PAUSED')
-  }
-
-  const stop = () => {
-    setAccumulated(0)
-    setRunStart(null)
-    setStops((prev) => resetStops(prev))
-    setPhase('STOPPED')
-  }
-
-  const sortedStops = useMemo(() => sortStops(stops, secondarySort), [stops, secondarySort])
-
-  const completedCount = stops.filter((s) => s.status === 'TERMINE').length
-  const nextStop = sortedStops.find((s) => s.status !== 'TERMINE') ?? null
+  }, [engine])
 
   return {
-    mission: missionQuery.data ?? null,
+    snapshot,
     isLoading: missionQuery.isLoading,
     error: missionQuery.error,
-    phase,
-    stops: sortedStops,
-    position,
     gpsError: geo.error,
     gpsSupported: geo.isSupported,
-    now,
-    elapsedMs,
-    completedCount,
-    totalCount: stops.length,
-    nextStop,
-    play,
-    pause,
-    stop,
-    /** Rayon d'arrivée prévu pour EN_COURS (non branché ce sprint). */
-    arrivalRadiusMeters: ARRIVAL_RADIUS_METERS,
+    devControls: DEV_CONTROLS,
+    play: () => engine.play(),
+    pause: () => engine.pause(),
+    stop: () => engine.stop(),
+    reportProblem: (code: ProblemCode) => engine.reportProblem(code),
   }
+}
+
+/** Calcule la prochaine position simulée d'après l'état de la mission active. */
+function nextSimPosition(engine: MissionEngine, sim: SimState): GpsPosition {
+  const active = engine.getSnapshot().activeMission?.stop
+  const now = Date.now()
+
+  if (!active) {
+    // Rien à cibler : position lointaine stable en attendant une mission.
+    sim.pos ??= { lat: 45.81, lng: -74.03 }
+    return { ...sim.pos, accuracy: 5, timestamp: now, speed: 0 }
+  }
+
+  const target: LatLng = { lat: active.lat, lng: active.lng }
+  sim.pos ??= { lat: target.lat + 0.02, lng: target.lng + 0.02 } // ~2,5 km au départ
+
+  let speed = 0 // reste 0 à l'arrêt sur place (approche + intervention)
+  if (active.status === 'EN_ROUTE' || active.status === 'EN_APPROCHE') {
+    sim.pos = moveToward(sim.pos, target, SIM_STEP_METERS)
+    speed = SIM_MOVING_SPEED_MPS
+    sim.enCoursSeconds = 0
+  } else if (active.status === 'EN_COURS') {
+    sim.enCoursSeconds += 1
+    if (sim.enCoursSeconds <= SIM_INTERVENTION_SECONDS) {
+      sim.pos = { lat: target.lat, lng: target.lng } // arrêté sur place
+    } else {
+      sim.pos = moveToward(sim.pos, awayTarget(target), SIM_STEP_METERS) // repart
+      speed = SIM_MOVING_SPEED_MPS
+    }
+  } else {
+    // DEPART : on continue de s'éloigner rapidement.
+    sim.pos = moveToward(sim.pos, awayTarget(target), SIM_STEP_METERS)
+    speed = SIM_MOVING_SPEED_MPS
+  }
+
+  return { ...sim.pos, accuracy: 4, timestamp: now, speed }
 }

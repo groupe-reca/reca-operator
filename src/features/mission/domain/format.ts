@@ -50,3 +50,22 @@ export function formatElapsed(ms: number): string {
   const minutes = totalMinutes % 60
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
 }
+
+/** Chronomètre MM:SS (compteur intelligent, ex. « 02:31 »). */
+export function formatStopwatch(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000))
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+}
+
+/**
+ * Sépare une adresse « rue, ville... » en deux lignes d'affichage. Les adresses
+ * de la tournée sont « 202 Rue Scott, Saint-Jérôme, QC J7Z 1H1 » : on garde la
+ * partie avant la première virgule comme rue, le reste comme ville.
+ */
+export function splitAddress(adresse: string): { street: string; city: string } {
+  const i = adresse.indexOf(',')
+  if (i === -1) return { street: adresse.trim(), city: '' }
+  return { street: adresse.slice(0, i).trim(), city: adresse.slice(i + 1).trim() }
+}

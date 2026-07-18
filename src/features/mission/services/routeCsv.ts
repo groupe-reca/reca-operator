@@ -86,6 +86,7 @@ function parseStops(csv: string): Stop[] {
         distanceMeters: null,
         etaMinutes: null,
         completedAt: null,
+        problemCode: null,
       }
     })
     .filter((stop) => Number.isFinite(stop.lat) && Number.isFinite(stop.lng))

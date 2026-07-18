@@ -26,17 +26,37 @@
   d'interface intercalée pour la cohérence des renvois). Créé et amorcé les 4 fichiers
   `memory/` (memory, tasks, plans, file-index).
 
+- [x] **Sprint 003 — Automatisation intelligente des interventions** (maquette `.input/design.png`)
+  Extrait TOUTE la logique dans un service pur `engine/MissionEngine.ts` (hors React) :
+  GPS, distances, tri par proximité, **vraie machine à états**
+  (EN_ATTENTE→EN_ROUTE→EN_APPROCHE→EN_COURS→DEPART→TERMINE ; Problème→NON_TERMINE),
+  chronomètres via horloge virtuelle qui se fige en pause, et journal interne des durées
+  (déplacement + intervention). `useMissionEngine` réduit à un adaptateur mince
+  (`useSyncExternalStore` + push GPS/tick). Nouvel écran : compteur intelligent
+  (`SmartCounter`), carte `CurrentMissionCard` (~40 %, section ATTENTION fictive), liste
+  toujours triée par distance, modale `ProblemModal` (8 codes), barre `DevControlBar`
+  (visible seulement si `DEV_CONTROLS`). Constantes réglables dans `domain/config.ts`
+  (rayon 25 m, vitesses 3/5 km/h, délais 30 s). Vérifié : `tsc -b` OK, `eslint` OK,
+  cycle complet + chemin Problème testés headless (tsx) sur le vrai moteur.
+
 ## En cours
 
 - (aucune)
 
 ## À faire (backlog / sprints futurs)
 
-- [ ] **Arrivée `EN_COURS`** : brancher la détection d'arrivée (<~20 m,
-  `ARRIVAL_RADIUS_METERS`) et le changement d'écran automatique. Architecture déjà prévue,
-  ne pas développer avant demande explicite.
 - [ ] **Rôle `operateur` dans Supabase** : la table `users` partagée ne le contient pas
   encore.
 - [ ] **Carte Mapbox** : volontairement absente des sprints actuels (token présent,
   `mapbox-gl` non installé). À valider quand la logique GPS sera stabilisée.
-- [ ] **Test runner** : aucun configuré ; en ajouter un avant d'écrire des tests.
+- [ ] **Test runner** : aucun configuré ; en ajouter un avant d'écrire des tests. La
+  logique du `MissionEngine` est pure (hors React) → idéale pour des tests unitaires
+  (Vitest) de la machine à états.
+- [ ] **Reportés du Sprint 003** (portée volontairement limitée à « logique + écran
+  principal ») : barre de navigation basse (Liste/Carte/Problème/Menu) et **Fiche
+  résidence** détaillée (téléphone client + bouton Problème, ouverture auto à l'arrivée,
+  option désactivable) — cf. maquette `.input/design.png`.
+- [ ] **Persistance du journal** : `MissionEngine` tient le journal des durées en mémoire
+  seule. À synchroniser plus tard (Supabase / module Routes) pour les statistiques.
+- [ ] **Notes ATTENTION réelles** : actuellement fictives (`services/attentionFixtures.ts`).
+  À alimenter depuis le contrat de la résidence quand le module Routes sera branché.

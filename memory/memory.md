@@ -32,13 +32,38 @@
   (`@tailwindcss/vite`, tokens en CSS, pas de `tailwind.config.js`). Alias `@ → ./src`.
 - **Organisation par feature** (`src/features/<f>/{pages,components,hooks,services,schemas,types,domain}`),
   calquée sur reca-app. Modules actuels : `auth`, `mission`.
-- **Statuts normalisés** (`src/features/mission/domain/status.ts`) :
-  `EN_ATTENTE | EN_APPROCHE | EN_COURS | TERMINE | PAUSE | ARRET`. Partagés par toute la
-  plateforme Signa. Le `tone` visuel est traduit en classes par l'UI, jamais dans le domaine.
+- **Statuts normalisés** (`src/features/mission/domain/status.ts`) — étendus au Sprint 003 :
+  `EN_ATTENTE | EN_ROUTE | EN_APPROCHE | EN_COURS | DEPART | TERMINE | NON_TERMINE | PAUSE |
+  ARRET`. Partagés par toute la plateforme Signa. Le `tone` visuel est traduit en classes
+  par l'UI (`components/statusTone.ts`), jamais dans le domaine. Icônes **génériques** (pas de
+  tracteur métier). **Décision** : le statut « problème » s'appelle `NON_TERMINE` (libellé
+  « Non terminé »), pas `A_REFAIRE` — choix explicite du client (le texte prime sur le libellé
+  « À REFAIRE » de la maquette). Icône X rouge conservée de la maquette.
 - **GPS & distances = calcul local uniquement**, aucune API externe : `useGeolocation`
-  (`watchPosition`) + haversine (`domain/geo.ts`). ETA estimée à vitesse supposée 30 km/h.
-  `EN_APPROCHE` déclenché sous ~10 min d'ETA ; `EN_COURS` (arrivée <20 m) **prévu mais non
-  branché** (sprint futur — `ARRIVAL_RADIUS_METERS`).
+  (`watchPosition`, capte aussi `coords.speed` + fallback dérivé de 2 positions) + haversine
+  (`domain/geo.ts`). ETA estimée à vitesse supposée 30 km/h (affichage seulement).
+
+- **Sprint 003 — moteur autonome (`engine/MissionEngine.ts`)** : TOUTE la logique est dans un
+  **service TS pur, hors React** (GPS reçu, distances, tri par proximité, machine à états,
+  chronos, journal). Le hook `useMissionEngine` n'est qu'un **adaptateur mince**
+  (`useSyncExternalStore` + `subscribe`/`getSnapshot`, comme `toastStore`) qui pousse le GPS et
+  un tick 1 s, et charge le CSV. Les composants sont purement présentationnels. **Ne jamais
+  remettre de logique dans l'UI ou le hook.**
+  - **Machine à états** (par stop) : un seul stop « engagé » à la fois = la Mission actuelle.
+    `EN_ATTENTE → EN_ROUTE` (plus proche non final) `→ EN_APPROCHE` (dans le rayon)
+    `→ EN_COURS` (rebours écoulé) `→ DEPART` (sorti du rayon + vitesse) `→ TERMINE` (rebours
+    écoulé). `TERMINE` **retiré de la liste** ; `NON_TERMINE` (Problème) **reste dans la liste**
+    jusqu'à clôture de la route. Tri **toujours par distance réelle** (plus de bascule ordre).
+  - **Horloge virtuelle** : le temps n'avance que pendant `RUNNING` → la pause fige
+    naturellement chronos et comptes à rebours. Journal (`domain/log.ts`) = durées réelles
+    déplacement + intervention, **en mémoire seule** (pas de persistance ce sprint).
+  - **Constantes réglables** dans `domain/config.ts` (jamais codées en dur) :
+    `ARRIVAL_RADIUS_METERS=25`, `LOW_SPEED_KMH=3`, `DEPART_SPEED_KMH=5`, `APPROACH_DELAY_MS=30000`,
+    `DEPART_DELAY_MS=30000`, `DEV_CONTROLS=true`. **Note** : l'ancien `ARRIVAL_RADIUS_METERS=20`
+    et `APPROACH_ETA_MINUTES` de `geo.ts` ont été **retirés** (le rayon vit maintenant dans
+    `config.ts`).
+  - **Mode DÉVELOPPEMENT** (`DEV_CONTROLS`) : `true` affiche la barre Play/Pause/Stop/Problème
+    et attend un Play manuel ; `false` (prod) masque la barre et **démarre automatiquement**.
 - **Source de données = CSV statique** `public/demo/route.csv`, chargé au démarrage. Aucune
   base permanente pour la tournée à ce stade, aucune communication avec RECA App.
 - **Parseur CSV tolérant** (`services/routeCsv.ts`) : séparateur `;` ou `,` auto-détecté,
@@ -60,8 +85,10 @@
 
 ## Bypass de développement
 
-- `?sim=1` : position GPS simulée qui converge vers le premier stop (teste `EN_APPROCHE`
-  sans matériel GPS).
+- `?sim=1` : position GPS simulée. Depuis le Sprint 003, elle parcourt **tout le cycle**
+  (convergence → arrêt sur place [approche + intervention] → éloignement rapide [départ] →
+  stop suivant), pilotée par l'état de la mission active. Teste la machine à états complète
+  sans matériel GPS.
 - `VITE_PREVIEW_MISSION="1"` (DEV only) : contourne l'auth et ouvre l'écran mission.
   `"0"` = auth réelle.
 

@@ -1,41 +1,47 @@
 import { useState } from 'react'
-import { Loader2, TriangleAlert } from 'lucide-react'
-import { MissionHeader } from '../components/MissionHeader'
-import { MissionCard } from '../components/MissionCard'
+import { Loader2, MapPin, TriangleAlert } from 'lucide-react'
+import { SmartCounter } from '../components/SmartCounter'
+import { CurrentMissionCard } from '../components/CurrentMissionCard'
 import { StopListHeader } from '../components/StopListHeader'
 import { StopList } from '../components/StopList'
-import { MissionFooter } from '../components/MissionFooter'
+import { DevControlBar } from '../components/DevControlBar'
+import { ProblemModal } from '../components/ProblemModal'
 import { useMissionEngine } from '../hooks/useMissionEngine'
-import type { SecondarySort } from '../hooks/useMissionEngine'
+import { formatAccuracy } from '../domain/format'
+import type { ProblemCode } from '../domain/problemCodes'
 
 export function MissionPage() {
-  const [sort, setSort] = useState<SecondarySort>('ordre')
-  const engine = useMissionEngine(sort)
+  const engine = useMissionEngine()
+  const { snapshot } = engine
+  const [problemOpen, setProblemOpen] = useState(false)
 
-  const toggleSort = () => setSort((prev) => (prev === 'ordre' ? 'distance' : 'ordre'))
+  const handleSelectProblem = (code: ProblemCode) => {
+    engine.reportProblem(code)
+    setProblemOpen(false)
+  }
+
+  const running = snapshot.phase === 'RUNNING'
 
   return (
     <div className="flex h-[100svh] flex-col bg-surface-bg">
-      {/* En-tête fixe */}
-      <header className="shrink-0 px-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-2">
-        <MissionHeader
-          position={engine.position}
-          now={engine.now}
-          phase={engine.phase}
-          onPlay={engine.play}
-          onPause={engine.pause}
-          onStop={engine.stop}
-        />
-        {engine.gpsError && engine.phase === 'RUNNING' && (
-          <p className="mt-2 flex items-center gap-1.5 px-1 text-label text-status-warning">
-            <TriangleAlert className="size-3.5 shrink-0" aria-hidden="true" />
-            {engine.gpsError}
+      {/* En-tête fixe : progression + GPS (dev) à gauche, compteur à droite */}
+      <header className="flex shrink-0 items-start justify-between gap-4 px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-2">
+        <div className="min-w-0">
+          <p className="text-label font-semibold uppercase tracking-wide text-text-muted">
+            {snapshot.completedCount} / {snapshot.totalCount} terminées
           </p>
-        )}
+          {engine.devControls && (
+            <p className="mt-1 flex items-center gap-1.5 text-label text-text-faint">
+              <MapPin className="size-3.5 shrink-0 text-status-success" aria-hidden="true" />
+              <span className="tabular-nums">{formatAccuracy(snapshot.position)}</span>
+            </p>
+          )}
+        </div>
+        <SmartCounter counter={snapshot.counter} />
       </header>
 
       {/* Contenu défilable */}
-      <main className="flex-1 overflow-y-auto px-3 pb-3">
+      <main className="flex-1 overflow-y-auto px-4 pb-3">
         {engine.isLoading ? (
           <div className="flex h-40 items-center justify-center">
             <Loader2 className="size-6 animate-spin text-text-muted" aria-hidden="true" />
@@ -47,28 +53,62 @@ export function MissionPage() {
           </p>
         ) : (
           <div className="flex flex-col gap-3">
-            {engine.mission && (
-              <MissionCard
-                nom={engine.mission.nom}
-                completedCount={engine.completedCount}
-                totalCount={engine.totalCount}
-              />
+            {snapshot.activeMission ? (
+              <CurrentMissionCard mission={snapshot.activeMission} />
+            ) : (
+              <EmptyHero running={running} allDone={snapshot.otherStops.length === 0} />
             )}
-            <StopListHeader sort={sort} onToggleSort={toggleSort} />
-            <StopList stops={engine.stops} phase={engine.phase} />
+
+            {engine.gpsError && running && (
+              <p className="flex items-center gap-1.5 px-1 text-label text-status-warning">
+                <TriangleAlert className="size-3.5 shrink-0" aria-hidden="true" />
+                {engine.gpsError}
+              </p>
+            )}
+
+            {snapshot.otherStops.length > 0 && (
+              <>
+                <StopListHeader />
+                <StopList stops={snapshot.otherStops} />
+              </>
+            )}
           </div>
         )}
       </main>
 
-      {/* Barre inférieure fixe */}
-      <footer className="shrink-0">
-        <MissionFooter
-          nextStop={engine.nextStop}
-          completedCount={engine.completedCount}
-          totalCount={engine.totalCount}
-          elapsedMs={engine.elapsedMs}
-        />
-      </footer>
+      {/* Barre de contrôle (dev uniquement) */}
+      {engine.devControls && (
+        <footer className="shrink-0">
+          <DevControlBar
+            phase={snapshot.phase}
+            canReportProblem={snapshot.activeMission !== null}
+            onPlay={engine.play}
+            onPause={engine.pause}
+            onStop={engine.stop}
+            onProblem={() => setProblemOpen(true)}
+          />
+        </footer>
+      )}
+
+      <ProblemModal
+        open={problemOpen}
+        onSelect={handleSelectProblem}
+        onClose={() => setProblemOpen(false)}
+      />
     </div>
+  )
+}
+
+function EmptyHero({ running, allDone }: { running: boolean; allDone: boolean }) {
+  const message = allDone
+    ? 'Tournée terminée. Toutes les résidences ont été traitées.'
+    : running
+      ? 'Acquisition du signal GPS…'
+      : 'Appuyez sur Play pour démarrer la tournée.'
+
+  return (
+    <section className="flex h-40 items-center justify-center rounded-card border border-border-subtle bg-surface-card p-6 text-center">
+      <p className="text-body text-text-muted">{message}</p>
+    </section>
   )
 }

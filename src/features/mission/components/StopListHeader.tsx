@@ -1,30 +1,20 @@
-import { ChevronDown } from 'lucide-react'
-import type { SecondarySort } from '../hooks/useMissionEngine'
+import { RefreshCw } from 'lucide-react'
 
-type StopListHeaderProps = {
-  sort: SecondarySort
-  onToggleSort: () => void
-}
-
-const SORT_LABEL: Record<SecondarySort, string> = {
-  ordre: 'Ordre de mission',
-  distance: 'Distance',
-}
-
-export function StopListHeader({ sort, onToggleSort }: StopListHeaderProps) {
+/**
+ * En-tête de la liste des autres résidences. Le tri est **toujours** par distance
+ * réelle (l'app s'adapte au parcours de l'opérateur) : plus de bascule d'ordre,
+ * juste un rappel « Triées par proximité ».
+ */
+export function StopListHeader() {
   return (
     <div className="flex items-center justify-between px-1">
       <h2 className="text-label font-semibold uppercase tracking-wide text-text-muted">
-        Prochaines propriétés
+        Autres résidences
       </h2>
-      <button
-        type="button"
-        onClick={onToggleSort}
-        className="flex items-center gap-1 rounded-control px-2 py-1 text-label font-medium text-text-muted transition-colors duration-150 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-      >
-        {SORT_LABEL[sort]}
-        <ChevronDown className="size-4" aria-hidden="true" />
-      </button>
+      <span className="flex items-center gap-1.5 text-label text-text-muted">
+        Triées par proximité
+        <RefreshCw className="size-3.5" aria-hidden="true" />
+      </span>
     </div>
   )
 }

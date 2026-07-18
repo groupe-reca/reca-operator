@@ -21,24 +21,38 @@
 
 ## Module : Mission (`src/features/mission/`) — cœur de l'app
 
+- **engine** (logique pure, hors React — Sprint 003) :
+  - `engine/MissionEngine.ts` — service : GPS reçu, distances, tri par proximité, machine à
+    états, chronos (horloge virtuelle), journal ; `subscribe`/`getSnapshot` (pattern store).
+    Exporte `MissionSnapshot`, `ActiveMissionView`, `CounterView`.
 - **domain** (logique pure, générique Signa) :
-  - `domain/types.ts` — `LatLng`, `GpsPosition`, `Stop`, `Mission`, `MissionPhase`
-  - `domain/status.ts` — union `MissionStatus`, `STATUS_CONFIG`, `restingIconFor`
+  - `domain/types.ts` — `LatLng`, `GpsPosition` (avec `speed`), `Stop` (avec `problemCode`),
+    `Mission`, `MissionPhase`
+  - `domain/status.ts` — union `MissionStatus` (9 statuts), `STATUS_CONFIG`, `restingIconFor`
+  - `domain/config.ts` — constantes réglables : `ARRIVAL_RADIUS_METERS`, `LOW_SPEED_KMH`,
+    `DEPART_SPEED_KMH`, `APPROACH_DELAY_MS`, `DEPART_DELAY_MS`, `DEV_CONTROLS`
+  - `domain/problemCodes.ts` — `PROBLEM_CODES` (8), type `ProblemCode`, `problemCodeLabel`
+  - `domain/log.ts` — type `MissionLogEntry` (journal des durées)
   - `domain/geo.ts` — `haversineMeters`, `estimateEtaMinutes`, `nearestStop`,
-    constantes `ASSUMED_SPEED_KMH`/`APPROACH_ETA_MINUTES`/`ARRIVAL_RADIUS_METERS`
-  - `domain/format.ts` — `formatCoords`, `formatAccuracy`, `formatClock`,
-    `formatTimeOfDay`, `formatDistance`, `formatEta`, `formatElapsed`
-- **services** : `services/routeCsv.ts` — `loadDemoMission()` (fetch
-  `public/demo/route.csv` → parseur tolérant `;`/`,`)
+    `metersPerSecondToKmh`, constante `ASSUMED_SPEED_KMH`
+  - `domain/format.ts` — `formatCoords`, `formatAccuracy`, `formatClock`, `formatTimeOfDay`,
+    `formatDistance`, `formatEta`, `formatElapsed`, `formatStopwatch`, `splitAddress`
+- **services** : `services/routeCsv.ts` — `loadDemoMission()` (parseur tolérant `;`/`,`) ;
+  `services/attentionFixtures.ts` — `attentionNotesFor(ordre)` (consignes ATTENTION fictives)
 - **hooks** :
-  - `hooks/useGeolocation.ts` — GPS réel (`watchPosition`)
-  - `hooks/useMissionEngine.ts` — orchestrateur (chargement, tick 1 s, recalcul
-    distance/ETA/statut, phases Play/Pause/Stop, tri, simulateur `?sim=1`)
-- **components** : `components/MissionHeader.tsx`, `components/MissionCard.tsx`,
-  `components/StopListHeader.tsx`, `components/StopList.tsx`, `components/StopRow.tsx`,
-  `components/MissionFooter.tsx`, `components/TransportControls.tsx` (Play/Pause/Stop)
+  - `hooks/useGeolocation.ts` — GPS réel (`watchPosition` + vitesse `coords.speed`/dérivée)
+  - `hooks/useMissionEngine.ts` — **adaptateur mince** : instancie l'engine, `useSyncExternalStore`,
+    pousse GPS + tick 1 s, charge le CSV, simulateur `?sim=1` (cycle complet). Réexpose
+    snapshot + commandes (`play`/`pause`/`stop`/`reportProblem`) + `devControls`.
+- **components** (présentationnels) : `components/SmartCounter.tsx`,
+  `components/CurrentMissionCard.tsx`, `components/StopListHeader.tsx`,
+  `components/StopList.tsx`, `components/StopRow.tsx`, `components/ProblemModal.tsx`
+  (8 codes), `components/DevControlBar.tsx` (Play/Pause/Stop/Problème, dev only),
+  `components/statusTone.ts` (tone → classes)
 - **pages** : `pages/MissionPage.tsx` (layout plein écran)
 - **data** : `public/demo/route.csv` (source de la tournée — hors `src/`)
+- **Supprimés au Sprint 003** : `MissionHeader.tsx`, `MissionCard.tsx`, `MissionFooter.tsx`,
+  `TransportControls.tsx` (remplacés par SmartCounter / CurrentMissionCard / DevControlBar).
 
 ## Partagé / transverse
 
