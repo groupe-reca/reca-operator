@@ -1,21 +1,10 @@
-Ordre,Adresse,Latitude,Longitude,Type
-1,4350 Rue Talon,45.771234,-74.007856,Résidentiel
-2,4125 Rue Talon,45.768900,-74.011200,Résidentiel
-3,4100 Rue Talon,45.766540,-74.014870,Commercial
-4,4080 Rue Talon,45.764210,-74.018330,Résidentiel
-5,4050 Rue Talon,45.761980,-74.021900,Résidentiel
-6,4010 Rue Talon,45.759700,-74.025410,Institutionnel
-7,3980 Rue Talon,45.757430,-74.028980,Résidentiel
-8,3950 Rue Talon,45.755120,-74.032460,Résidentiel
-9,3920 Rue Talon,45.752880,-74.036010,Commercial
-10,3890 Rue Talon,45.750540,-74.039540,Résidentiel
-11,3860 Rue Talon,45.748270,-74.043080,Résidentiel
-12,3830 Rue Talon,45.745990,-74.046620,Résidentiel
-13,3800 Rue Talon,45.743710,-74.050150,Institutionnel
-14,3770 Rue Talon,45.741430,-74.053690,Résidentiel
-15,3740 Rue Talon,45.739150,-74.057230,Commercial
-16,3710 Rue Talon,45.736870,-74.060770,Résidentiel
-17,3680 Rue Talon,45.734590,-74.064300,Résidentiel
-18,3650 Rue Talon,45.732310,-74.067840,Résidentiel
-19,3620 Rue Talon,45.730030,-74.071380,Commercial
-20,3590 Rue Talon,45.727750,-74.074920,Résidentiel
+ordre;adresse;lat;lng;statut;code_probleme;heure_arrivee;heure_depart
+1;202 Rue Scott, Saint-Jérôme, QC J7Z 1H1;45.788659;-74.003894;en_attente;;;
+2;220 Rue Scott, Saint-Jérôme, QC J7Z 1H1;45.788717;-74.003238;en_attente;;;
+3;232 Rue Scott, Saint-Jérôme, QC J7Z 1H1;45.788749;-74.002847;en_attente;;;
+4;244 Rue Scott, Saint-Jérôme, QC J7Z 1H1;45.788616;-74.002164;en_attente;;;
+5;252 Rue Scott, Saint-Jérôme, QC J7Z 1H1;45.789083;-74.001786;en_attente;;;
+6;769 Rue Saint-Georges, Saint-Jérôme, QC J7Z 5C8;45.788500;-74.003793;en_attente;;;
+7;751 Rue Saint-Georges, Saint-Jérôme, QC J7Z 5C8;45.788210;-74.003600;en_attente;;;
+8;703 Rue Saint-Georges, Saint-Jérôme, QC J7Z 5C8;45.787630;-74.003130;en_attente;;;
+9;687 Rue Saint-Georges, Saint-Jérôme, QC J7Z 5C8;45.787175;-74.002580;en_attente;;;
