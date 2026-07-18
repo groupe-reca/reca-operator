@@ -1,4 +1,4 @@
-import { Pause, Play, Square, TriangleAlert } from 'lucide-react'
+import { Pause, Play, Settings, Square, TriangleAlert } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { MissionPhase } from '../domain/types'
 
@@ -9,6 +9,7 @@ type DevControlBarProps = {
   onPause: () => void
   onStop: () => void
   onProblem: () => void
+  onSettings: () => void
 }
 
 /**
@@ -23,6 +24,7 @@ export function DevControlBar({
   onPause,
   onStop,
   onProblem,
+  onSettings,
 }: DevControlBarProps) {
   return (
     <div className="border-t border-border-subtle bg-surface-card px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
@@ -62,6 +64,14 @@ export function DevControlBar({
           active={false}
           disabled={!canReportProblem}
           onClick={onProblem}
+        />
+        <Control
+          icon={Settings}
+          label="Réglages"
+          colorClass="bg-surface-card-elevated"
+          labelClass="text-text-muted"
+          active={false}
+          onClick={onSettings}
         />
       </div>
     </div>

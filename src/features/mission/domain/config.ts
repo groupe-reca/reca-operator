@@ -28,3 +28,28 @@ export const DEPART_DELAY_MS = 30_000
  * disparaît et l'app démarre automatiquement — plus aucune action manuelle.
  */
 export const DEV_CONTROLS = true
+
+/**
+ * Regroupement runtime de **tous** les paramètres réglables du moteur. Le
+ * `MissionEngine` en tient une copie vivante, modifiable en direct via
+ * `setConfig` (voir la modale de réglages). Les constantes ci-dessus restent la
+ * **source des valeurs par défaut** (bouton « Réinitialiser »).
+ */
+export type EngineConfig = {
+  arrivalRadiusMeters: number
+  lowSpeedKmh: number
+  departSpeedKmh: number
+  approachDelayMs: number
+  departDelayMs: number
+  devControls: boolean
+}
+
+/** Valeurs par défaut = les constantes ci-dessus, assemblées en objet. */
+export const DEFAULT_ENGINE_CONFIG: EngineConfig = {
+  arrivalRadiusMeters: ARRIVAL_RADIUS_METERS,
+  lowSpeedKmh: LOW_SPEED_KMH,
+  departSpeedKmh: DEPART_SPEED_KMH,
+  approachDelayMs: APPROACH_DELAY_MS,
+  departDelayMs: DEPART_DELAY_MS,
+  devControls: DEV_CONTROLS,
+}

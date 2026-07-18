@@ -1,9 +1,5 @@
-import {
-  ARRIVAL_RADIUS_METERS,
-  APPROACH_DELAY_MS,
-  DEPART_DELAY_MS,
-  DEPART_SPEED_KMH,
-} from '../domain/config'
+import { DEFAULT_ENGINE_CONFIG } from '../domain/config'
+import type { EngineConfig } from '../domain/config'
 import { estimateEtaMinutes, haversineMeters, metersPerSecondToKmh } from '../domain/geo'
 import type { GpsPosition, Mission, MissionPhase, Stop } from '../domain/types'
 import type { MissionStatus } from '../domain/status'
@@ -35,6 +31,8 @@ export type MissionSnapshot = {
   completedCount: number
   totalCount: number
   position: GpsPosition | null
+  /** Paramètres réglables courants du moteur (copie vivante, cf. `setConfig`). */
+  config: EngineConfig
 }
 
 export type ActiveMissionView = {
@@ -93,6 +91,7 @@ const EMPTY_SNAPSHOT: MissionSnapshot = {
   completedCount: 0,
   totalCount: 0,
   position: null,
+  config: DEFAULT_ENGINE_CONFIG,
 }
 
 export class MissionEngine {
@@ -100,6 +99,9 @@ export class MissionEngine {
   private stops: Stop[] = []
   private position: GpsPosition | null = null
   private log: MissionLogEntry[] = []
+
+  /** Copie vivante des paramètres réglables (modifiable via `setConfig`). */
+  private config: EngineConfig = { ...DEFAULT_ENGINE_CONFIG }
 
   private clock = 0
   private lastTickMs: number | null = null
@@ -118,6 +120,21 @@ export class MissionEngine {
   }
 
   getSnapshot = (): MissionSnapshot => this.snapshot
+
+  // --- Paramètres réglables (runtime) --------------------------------------
+
+  getConfig = (): EngineConfig => this.config
+
+  /**
+   * Met à jour un ou plusieurs paramètres réglables en direct. Si une mission est
+   * en cours, la machine à états est ré-évaluée immédiatement avec les nouveaux
+   * seuils (un rayon élargi peut, par exemple, faire passer un stop EN_APPROCHE).
+   */
+  setConfig(patch: Partial<EngineConfig>): void {
+    this.config = { ...this.config, ...patch }
+    if (this.phase === 'RUNNING') this.evaluate()
+    this.emit()
+  }
 
   // --- Commandes -----------------------------------------------------------
 
@@ -217,7 +234,7 @@ export class MissionEngine {
 
     switch (active.status) {
       case 'EN_ROUTE':
-        if (distance <= ARRIVAL_RADIUS_METERS) {
+        if (distance <= this.config.arrivalRadiusMeters) {
           active.status = 'EN_APPROCHE'
           timers.arrivedClock = this.clock
           timers.arrivedAtWall = Date.now()
@@ -226,31 +243,31 @@ export class MissionEngine {
         break
 
       case 'EN_APPROCHE':
-        if (distance > ARRIVAL_RADIUS_METERS) {
+        if (distance > this.config.arrivalRadiusMeters) {
           // Ressorti du rayon avant la fin du rebours : on repart EN_ROUTE.
           active.status = 'EN_ROUTE'
           timers.arrivedClock = null
           timers.arrivedAtWall = null
           timers.approachStartClock = null
-        } else if (this.clock - (timers.approachStartClock ?? this.clock) >= APPROACH_DELAY_MS) {
+        } else if (this.clock - (timers.approachStartClock ?? this.clock) >= this.config.approachDelayMs) {
           active.status = 'EN_COURS'
           timers.interventionStartClock = this.clock
         }
         break
 
       case 'EN_COURS':
-        if (distance > ARRIVAL_RADIUS_METERS && speedKmh > DEPART_SPEED_KMH) {
+        if (distance > this.config.arrivalRadiusMeters && speedKmh > this.config.departSpeedKmh) {
           active.status = 'DEPART'
           timers.departStartClock = this.clock
         }
         break
 
       case 'DEPART':
-        if (distance <= ARRIVAL_RADIUS_METERS) {
+        if (distance <= this.config.arrivalRadiusMeters) {
           // Revenu sur place : l'intervention reprend.
           active.status = 'EN_COURS'
           timers.departStartClock = null
-        } else if (this.clock - (timers.departStartClock ?? this.clock) >= DEPART_DELAY_MS) {
+        } else if (this.clock - (timers.departStartClock ?? this.clock) >= this.config.departDelayMs) {
           this.completeActive()
         }
         break
@@ -393,6 +410,7 @@ export class MissionEngine {
       completedCount,
       totalCount: this.stops.length,
       position: this.position,
+      config: this.config,
     }
   }
 
@@ -411,7 +429,7 @@ export class MissionEngine {
         return {
           status: 'EN_APPROCHE',
           elapsedMs: this.clock - (t.approachStartClock ?? this.clock),
-          targetMs: APPROACH_DELAY_MS,
+          targetMs: this.config.approachDelayMs,
         }
       case 'EN_COURS':
         return {
@@ -423,7 +441,7 @@ export class MissionEngine {
         return {
           status: 'DEPART',
           elapsedMs: this.clock - (t.departStartClock ?? this.clock),
-          targetMs: DEPART_DELAY_MS,
+          targetMs: this.config.departDelayMs,
         }
       default:
         return { status: active.status, elapsedMs: 0, targetMs: null }

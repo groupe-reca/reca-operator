@@ -4,8 +4,8 @@ import { loadDemoMission } from '../services/routeCsv'
 import { useGeolocation } from './useGeolocation'
 import { MissionEngine } from '../engine/MissionEngine'
 import { haversineMeters } from '../domain/geo'
-import { DEV_CONTROLS } from '../domain/config'
 import type { GpsPosition, LatLng } from '../domain/types'
+import type { EngineConfig } from '../domain/config'
 import type { ProblemCode } from '../domain/problemCodes'
 
 /**
@@ -59,8 +59,8 @@ export function useMissionEngine() {
   useEffect(() => {
     if (!mission) return
     engine.loadMission(mission)
-    // Production (DEV_CONTROLS=false) : démarrage auto, aucune action manuelle.
-    if (!DEV_CONTROLS) engine.play()
+    // Production (mode dev désactivé) : démarrage auto, aucune action manuelle.
+    if (!engine.getConfig().devControls) engine.play()
   }, [engine, mission])
 
   // GPS réel (désactivé en simulation).
@@ -87,11 +87,13 @@ export function useMissionEngine() {
     error: missionQuery.error,
     gpsError: geo.error,
     gpsSupported: geo.isSupported,
-    devControls: DEV_CONTROLS,
+    devControls: snapshot.config.devControls,
+    config: snapshot.config,
     play: () => engine.play(),
     pause: () => engine.pause(),
     stop: () => engine.stop(),
     reportProblem: (code: ProblemCode) => engine.reportProblem(code),
+    setConfig: (patch: Partial<EngineConfig>) => engine.setConfig(patch),
   }
 }
 

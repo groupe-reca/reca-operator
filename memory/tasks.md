@@ -43,6 +43,31 @@
 
 - (aucune)
 
+## Terminées (suite)
+
+- [x] **tache5 — Réglage runtime des paramètres du moteur** (bouton engrenage)
+  Ajouté un bouton « Réglages » (engrenage) dans `DevControlBar` ouvrant une nouvelle
+  modale `SettingsModal` (bottom-sheet, patron `ProblemModal`) qui règle **en direct** tous
+  les paramètres du module : rayon de détection, délais EN COURS / TERMINÉ (réglés en s ↔
+  stockés en ms), vitesse de départ min, vitesse arrêt max, toggle mode développement,
+  bouton Réinitialiser. Archi : `config.ts` reste la source des **défauts**
+  (`DEFAULT_ENGINE_CONFIG` + type `EngineConfig`) ; le `MissionEngine` en tient une **copie
+  vivante** (`config`), exposée dans `MissionSnapshot`, modifiable via `setConfig` (ré-évalue
+  la machine à états si RUNNING). `useMissionEngine` réexpose `config` + `setConfig` et lit
+  `devControls` depuis le snapshot. Runtime seulement, aucune persistance. `LOW_SPEED_KMH`
+  exposé mais toujours pas branché dans la logique (marqué « réservé » dans l'UI). Vérifié :
+  `tsc -b` OK, `eslint` OK, et test headless (tsx) — à 40 m, rayon 25 m → EN_ROUTE ; rayon
+  porté à 60 m via `setConfig` → EN_APPROCHE.
+
+## Abandonnées / en suspens
+
+- [ ] **tache4 — Carte Mapbox interactive** (`.input/tache4.md`, maquette `.input/design-v3.png`)
+  Mise en pause à la demande du client. Grosse tâche : carte satellite Mapbox, badges de
+  numéros civiques, halo résidence active, marqueurs colorés par statut, boussole, cône de
+  vision, zones. **Conflit non tranché** : maquette v3 en **paysage** vs contrainte « mobile
+  portrait ». Reprendre par cette question (orientation) + portée carte avant de coder.
+  `mapbox-gl` non installé ; token présent.
+
 ## À faire (backlog / sprints futurs)
 
 - [ ] **Rôle `operateur` dans Supabase** : la table `users` partagée ne le contient pas

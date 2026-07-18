@@ -60,6 +60,31 @@
   (tsx) sur le vrai moteur (délais ~30 s respectés, TERMINE retiré, NON_TERMINE conservé,
   journal des durées correct).
 
+### tache5 — Réglage runtime des paramètres du moteur (bouton engrenage) ✅
+
+- **Objectif** : ajouter un bouton dans la barre de développement ouvrant une modale qui
+  règle **tous** les paramètres du module Mission (ceux de `domain/config.ts`) en direct,
+  sans recompiler. Reprend le panneau « PARAMÈTRES ACTUELS » de la maquette.
+- **Décision d'archi** : les constantes de `config.ts` restent la **source des défauts** ;
+  le moteur en tient désormais une **copie vivante** (`config: EngineConfig`) modifiable via
+  `setConfig(patch)`. Toujours zéro logique dans l'UI : la modale ne fait que lire
+  `snapshot.config` et appeler `setConfig`. Runtime seulement (pas de persistance).
+- **Étapes** : (1) `config.ts` — ajouter type `EngineConfig` + `DEFAULT_ENGINE_CONFIG`
+  (assemblé depuis les constantes existantes). (2) `MissionEngine` — champ `config`, l'exposer
+  dans `MissionSnapshot`, remplacer les constantes importées par `this.config.*`, ajouter
+  `getConfig`/`setConfig` (ré-`evaluate` si RUNNING). (3) `useMissionEngine` — lire
+  `devControls` depuis `snapshot.config`, réexposer `config` + `setConfig`, auto-play via
+  `engine.getConfig()`. (4) `SettingsModal.tsx` (patron `ProblemModal`, bottom-sheet) : rayon,
+  vitesses, délais (affichés en s ↔ ms), toggle mode développement, bouton Réinitialiser.
+  (5) `DevControlBar` — bouton engrenage (prop `onSettings`). (6) `MissionPage` — état
+  `settingsOpen`, branche la modale.
+- **Fichiers touchés** : `domain/config.ts`, `engine/MissionEngine.ts`, `hooks/useMissionEngine.ts`,
+  `components/SettingsModal.tsx` (nouveau), `components/DevControlBar.tsx`, `pages/MissionPage.tsx`.
+- **Risques** : `LOW_SPEED_KMH` exposé mais **pas encore branché** dans la machine à états
+  (le rester honnête dans l'UI). Inputs numériques contrôlés → garder un brouillon local pour
+  permettre la saisie. Toggle « mode dev » à `false` masque la barre (donc le bouton) → note
+  UX, récupérable au rechargement. TS strict `verbatimModuleSyntax` → `import type`.
+
 ---
 
 ## Actifs

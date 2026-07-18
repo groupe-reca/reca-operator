@@ -64,6 +64,15 @@
     `config.ts`).
   - **Mode DÉVELOPPEMENT** (`DEV_CONTROLS`) : `true` affiche la barre Play/Pause/Stop/Problème
     et attend un Play manuel ; `false` (prod) masque la barre et **démarre automatiquement**.
+- **Paramètres réglables au runtime (tache5)** : `domain/config.ts` reste la **source des
+  valeurs par défaut** (constantes + `DEFAULT_ENGINE_CONFIG` + type `EngineConfig`). Le
+  `MissionEngine` en tient une **copie vivante** (`config`), exposée dans `MissionSnapshot`,
+  modifiée via `setConfig(patch)` (ré-évalue la machine à états si RUNNING). Réglés en direct
+  via la modale `SettingsModal` (ouverte par le bouton engrenage de `DevControlBar`).
+  **Runtime seulement, aucune persistance** — un rechargement rétablit les défauts. Règle
+  maintenue : la logique lit `this.config.*`, jamais de valeur codée en dur ; l'UI ne fait que
+  lire `snapshot.config` et appeler `setConfig`. `LOW_SPEED_KMH`/`lowSpeedKmh` est exposé mais
+  **toujours pas branché** dans `evaluate()` (affiché « réservé » dans l'UI).
 - **Source de données = CSV statique** `public/demo/route.csv`, chargé au démarrage. Aucune
   base permanente pour la tournée à ce stade, aucune communication avec RECA App.
 - **Parseur CSV tolérant** (`services/routeCsv.ts`) : séparateur `;` ou `,` auto-détecté,

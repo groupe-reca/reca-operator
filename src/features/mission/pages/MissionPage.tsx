@@ -6,6 +6,7 @@ import { StopListHeader } from '../components/StopListHeader'
 import { StopList } from '../components/StopList'
 import { DevControlBar } from '../components/DevControlBar'
 import { ProblemModal } from '../components/ProblemModal'
+import { SettingsModal } from '../components/SettingsModal'
 import { useMissionEngine } from '../hooks/useMissionEngine'
 import { formatAccuracy } from '../domain/format'
 import type { ProblemCode } from '../domain/problemCodes'
@@ -14,6 +15,7 @@ export function MissionPage() {
   const engine = useMissionEngine()
   const { snapshot } = engine
   const [problemOpen, setProblemOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   const handleSelectProblem = (code: ProblemCode) => {
     engine.reportProblem(code)
@@ -86,6 +88,7 @@ export function MissionPage() {
             onPause={engine.pause}
             onStop={engine.stop}
             onProblem={() => setProblemOpen(true)}
+            onSettings={() => setSettingsOpen(true)}
           />
         </footer>
       )}
@@ -94,6 +97,13 @@ export function MissionPage() {
         open={problemOpen}
         onSelect={handleSelectProblem}
         onClose={() => setProblemOpen(false)}
+      />
+
+      <SettingsModal
+        open={settingsOpen}
+        config={snapshot.config}
+        onChange={engine.setConfig}
+        onClose={() => setSettingsOpen(false)}
       />
     </div>
   )
