@@ -13,7 +13,7 @@ type SettingsModalProps = {
 }
 
 /** Clés numériques réglables (les booléens dev/voix sont traités à part). */
-type NumericKey = Exclude<keyof EngineConfig, 'devControls' | 'voiceEnabled'>
+type NumericKey = Exclude<keyof EngineConfig, 'devControls' | 'voiceEnabled' | VoiceCategoryKey>
 
 type NumericField = {
   key: NumericKey
@@ -46,6 +46,17 @@ const NUMERIC_FIELDS: NumericField[] = [
     factor: 1,
     hint: 'Réservé — pas encore branché dans la logique',
   },
+]
+
+/** Clés booléennes des catégories d'annonces vocales. */
+type VoiceCategoryKey = 'voiceStart' | 'voiceNextAddress' | 'voiceSide' | 'voiceAlerts' | 'voiceEnd'
+
+const VOICE_CATEGORIES: { key: VoiceCategoryKey; label: string; hint: string }[] = [
+  { key: 'voiceStart', label: 'Début de mission', hint: '« Mission démarrée. »' },
+  { key: 'voiceNextAddress', label: 'Prochaine adresse', hint: 'À chaque changement de mission actuelle.' },
+  { key: 'voiceSide', label: 'Gauche / Droite', hint: 'Côté de la résidence, si le calcul est fiable.' },
+  { key: 'voiceAlerts', label: 'Alertes critiques', hint: "Note opérateur, lue à l'approche." },
+  { key: 'voiceEnd', label: 'Fin de mission', hint: '« Mission terminée. »' },
 ]
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
@@ -159,10 +170,21 @@ export function SettingsModal({ open, config, onChange, onTestVoice, onClose }: 
               <div className="flex flex-col gap-2">
                 <ToggleRow
                   label="Assistance vocale"
-                  hint="Annonces vocales aux moments clés (début / fin de mission)."
+                  hint="Interrupteur général. Coupé : aucune annonce."
                   checked={config.voiceEnabled}
                   onToggle={() => onChange({ voiceEnabled: !config.voiceEnabled })}
                 />
+
+                {VOICE_CATEGORIES.map((cat) => (
+                  <ToggleRow
+                    key={cat.key}
+                    label={cat.label}
+                    hint={cat.hint}
+                    checked={config[cat.key]}
+                    onToggle={() => onChange({ [cat.key]: !config[cat.key] } as Partial<EngineConfig>)}
+                  />
+                ))}
+
                 <button
                   type="button"
                   onClick={onTestVoice}

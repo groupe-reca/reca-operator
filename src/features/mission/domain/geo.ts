@@ -1,4 +1,10 @@
-import type { LatLng, Stop } from './types'
+import type { GpsPosition, LatLng, Stop } from './types'
+import {
+  SIDE_MAX_ANGLE_DEG,
+  SIDE_MAX_DISTANCE_METERS,
+  SIDE_MIN_ANGLE_DEG,
+  SIDE_MIN_SPEED_KMH,
+} from './config'
 
 /**
  * Calculs GPS purs — aucune API externe. Utilisés par le moteur de mission pour
@@ -40,6 +46,50 @@ export function estimateEtaMinutes(
 /** Convertit une vitesse m/s (GPS) en km/h. `null` → 0. */
 export function metersPerSecondToKmh(mps: number | null): number {
   return mps !== null && Number.isFinite(mps) && mps > 0 ? mps * 3.6 : 0
+}
+
+function toDegrees(radians: number): number {
+  return (radians * 180) / Math.PI
+}
+
+/** Cap initial (0–360°, sens horaire depuis le nord) de `from` vers `to`. */
+export function bearingDegrees(from: LatLng, to: LatLng): number {
+  const lat1 = toRadians(from.lat)
+  const lat2 = toRadians(to.lat)
+  const dLng = toRadians(to.lng - from.lng)
+  const y = Math.sin(dLng) * Math.cos(lat2)
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng)
+  return (toDegrees(Math.atan2(y, x)) + 360) % 360
+}
+
+/** Ramène un écart d'angle dans (−180, 180]. */
+function signedAngleDiff(a: number, b: number): number {
+  let diff = ((a - b + 540) % 360) - 180
+  if (diff === -180) diff = 180
+  return diff
+}
+
+/**
+ * Détermine si la résidence se situe à **gauche** ou à **droite** de l'opérateur,
+ * à partir de sa position, de son **cap** (heading) et des coordonnées de la
+ * résidence. Retourne `null` (→ silence) quand le calcul n'est pas fiable :
+ * cap inconnu, trop lent, trop loin, ou angle trop proche de l'axe avant/arrière
+ * (ambigu). Calcul purement local, aucune API externe.
+ */
+export function residenceSide(
+  position: GpsPosition,
+  target: LatLng,
+  distanceMeters: number,
+): 'left' | 'right' | null {
+  if (position.heading === null || !Number.isFinite(position.heading)) return null
+  if (metersPerSecondToKmh(position.speed) < SIDE_MIN_SPEED_KMH) return null
+  if (distanceMeters > SIDE_MAX_DISTANCE_METERS) return null
+
+  const diff = signedAngleDiff(bearingDegrees(position, target), position.heading)
+  const abs = Math.abs(diff)
+  if (abs < SIDE_MIN_ANGLE_DEG || abs > SIDE_MAX_ANGLE_DEG) return null
+
+  return diff > 0 ? 'right' : 'left'
 }
 
 export type NearestStop = {

@@ -60,18 +60,26 @@
 
 ## Module transverse : Voix (`src/core/voice/`) — Sprint 004
 
-> Couche d'assistance vocale **indépendante** des features. Chaîne :
-> `MissionEngine → VoiceAnnouncementManager → VoiceService → TTS natif`. **Aucun composant
-> React ne touche le TTS** ; seul `useVoice` fait le pont (importé par `MissionPage`).
+> Couche d'assistance vocale (service + décideur) **générique**, sous `src/core/voice/`. Chaîne :
+> `MissionEngine → (événements) → VoiceAnnouncementManager → VoiceService → TTS natif`. **Aucun
+> composant React ne touche le TTS** ; seul le pont `features/mission/hooks/useVoiceBridge.ts`
+> relie le moteur et la voix (utilisé par `MissionPage`).
 
 - `core/voice/VoiceService.ts` — abstraction TTS (`speechSynthesis`), singleton `voiceService` ;
-  `initialize/speak/stop/isEnabled/setEnabled/isSupported`, voix `fr-CA`.
-- `core/voice/VoiceAnnouncementManager.ts` — décideur, singleton `voiceAnnouncements` ;
-  `announceMissionStarted/announceNextAddress/announceCriticalAlert/announceMissionCompleted`.
-- `core/voice/useVoice.ts` — hook glue : init, sync `voiceEnabled`, annonce début/fin de
-  mission depuis le snapshot ; retourne `testVoice()`.
-- Réglage `voiceEnabled` : dans `EngineConfig` (`features/mission/domain/config.ts`), UI dans
-  `SettingsModal` (section « Assistance vocale » + bouton « Tester la voix »).
+  `initialize/speak/stop/isEnabled/setEnabled/isSupported`, voix `fr-CA`. **Générique.**
+- `core/voice/VoiceAnnouncementManager.ts` — décideur (**toute** la décision : catégories +
+  anti-répétition), singleton `voiceAnnouncements` ; `setCategories/reset` + handlers
+  `onMissionStarted/onActiveMissionChanged/onResidenceSide/onCriticalAlert/onMissionCompleted`.
+  Type `VoiceCategories`. **Générique** (aucun import de `features/`).
+- Le pont React vit **côté feature** : `features/mission/hooks/useVoiceBridge.ts` — init +
+  sync (master + catégories depuis `config`) + abonnement `engine.onEvent` → handlers du manager ;
+  retourne `testVoice()`. (Remplace l'ancien `core/voice/useVoice.ts`, **supprimé** au Sprint 005.)
+- Bus d'événements : `MissionEngine.onEvent` + type `MissionEvent` (`engine/MissionEngine.ts`).
+  `useMissionEngine` réexpose `subscribeEvents`.
+- Réglages `voiceEnabled` + 5 catégories (`voiceStart/voiceNextAddress/voiceSide/voiceAlerts/
+  voiceEnd`) dans `EngineConfig` (`domain/config.ts`) ; seuils G/D `SIDE_*` (hors UI). UI dans
+  `SettingsModal` (section « Assistance vocale » : master + 5 toggles + « Tester la voix »).
+  Géométrie G/D : `domain/geo.ts` (`bearingDegrees`, `residenceSide`).
 
 ## Partagé / transverse
 

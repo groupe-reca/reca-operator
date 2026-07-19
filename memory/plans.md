@@ -103,6 +103,24 @@
 - **Résultat** : `tsc -b` OK, `eslint` OK ; headless (tsx) — 4 messages exacts + gate `speak` ;
   aucun TTS dans `src/features` (grep).
 
+### Sprint 005 — Assistance vocale Phase 3 (annonces automatiques GPS) ✅
+
+- **Objectif** : annonces vocales entièrement automatiques pilotées par les événements du moteur
+  (prochaine adresse, alerte critique à l'approche, gauche/droite, début/fin), anti-répétition,
+  5 catégories réglables. Décision centralisée dans `VoiceAnnouncementManager`.
+- **Étapes** : (1) bus d'événements `MissionEngine` (`onEvent`/`MissionEvent`, émissions dans
+  play/selectActiveStop/evaluate/completeActive/reportProblem, `completedEmitted`). (2) géométrie
+  `geo.bearingDegrees`+`residenceSide`, `heading` sur `GpsPosition`, capté par `useGeolocation` +
+  simulé. (3) manager : catégories + anti-répétition (`Set<ordre>`) + handlers + `reset`.
+  (4) pont `useVoiceBridge` (remplace `core/voice/useVoice.ts` supprimé) ; `useMissionEngine`
+  expose `subscribeEvents`. (5) 5 flags voix dans `EngineConfig` + toggles `SettingsModal`.
+- **Risques** : `NumericKey` de `SettingsModal` devait exclure les 5 nouveaux booléens (TS2362) ;
+  champ write-only `missionStartedDone` (TS6133) supprimé ; couplage couches (pont côté feature,
+  `core/voice` générique) ; `react-hooks/refs`.
+- **Résultat** : `tsc -b` OK, `eslint` OK ; headless (tsx) — géométrie G/D, dédup+catégories,
+  séquence d'événements exacte (STARTED×1, CHANGED×2, APPROACH×2, COMPLETED×1) ; grep : aucun TTS
+  dans les composants.
+
 ---
 
 ## Actifs

@@ -33,6 +33,26 @@ export const DEV_CONTROLS = true
 export const VOICE_ENABLED = true
 
 /**
+ * Catégories d'annonces vocales, activables **indépendamment** (défaut : toutes
+ * actives). Sans effet si le master `VOICE_ENABLED` est coupé.
+ */
+export const VOICE_START = true
+export const VOICE_NEXT_ADDRESS = true
+export const VOICE_SIDE = true
+export const VOICE_ALERTS = true
+export const VOICE_END = true
+
+/**
+ * Seuils de fiabilité de la détection gauche/droite (`residenceSide`).
+ * **Réglable en code** — non exposé dans l'UI. Le côté n'est annoncé que si le
+ * calcul est clairement fiable ; sinon on garde le silence.
+ */
+export const SIDE_MAX_DISTANCE_METERS = 80
+export const SIDE_MIN_SPEED_KMH = 5
+export const SIDE_MIN_ANGLE_DEG = 25
+export const SIDE_MAX_ANGLE_DEG = 155
+
+/**
  * Regroupement runtime de **tous** les paramètres réglables du moteur. Le
  * `MissionEngine` en tient une copie vivante, modifiable en direct via
  * `setConfig` (voir la modale de réglages). Les constantes ci-dessus restent la
@@ -46,6 +66,11 @@ export type EngineConfig = {
   departDelayMs: number
   devControls: boolean
   voiceEnabled: boolean
+  voiceStart: boolean
+  voiceNextAddress: boolean
+  voiceSide: boolean
+  voiceAlerts: boolean
+  voiceEnd: boolean
 }
 
 /** Valeurs par défaut = les constantes ci-dessus, assemblées en objet. */
@@ -57,4 +82,9 @@ export const DEFAULT_ENGINE_CONFIG: EngineConfig = {
   departDelayMs: DEPART_DELAY_MS,
   devControls: DEV_CONTROLS,
   voiceEnabled: VOICE_ENABLED,
+  voiceStart: VOICE_START,
+  voiceNextAddress: VOICE_NEXT_ADDRESS,
+  voiceSide: VOICE_SIDE,
+  voiceAlerts: VOICE_ALERTS,
+  voiceEnd: VOICE_END,
 }

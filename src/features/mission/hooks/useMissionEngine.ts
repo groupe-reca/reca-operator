@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { loadDemoMission } from '../services/routeCsv'
 import { useGeolocation } from './useGeolocation'
 import { MissionEngine } from '../engine/MissionEngine'
-import { haversineMeters } from '../domain/geo'
+import { bearingDegrees, haversineMeters } from '../domain/geo'
 import type { GpsPosition, LatLng } from '../domain/types'
 import type { EngineConfig } from '../domain/config'
 import type { ProblemCode } from '../domain/problemCodes'
@@ -89,6 +89,7 @@ export function useMissionEngine() {
     gpsSupported: geo.isSupported,
     devControls: snapshot.config.devControls,
     config: snapshot.config,
+    subscribeEvents: engine.onEvent,
     play: () => engine.play(),
     pause: () => engine.pause(),
     stop: () => engine.stop(),
@@ -105,12 +106,13 @@ function nextSimPosition(engine: MissionEngine, sim: SimState): GpsPosition {
   if (!active) {
     // Rien à cibler : position lointaine stable en attendant une mission.
     sim.pos ??= { lat: 45.81, lng: -74.03 }
-    return { ...sim.pos, accuracy: 5, timestamp: now, speed: 0 }
+    return { ...sim.pos, accuracy: 5, timestamp: now, speed: 0, heading: null }
   }
 
   const target: LatLng = { lat: active.lat, lng: active.lng }
   sim.pos ??= { lat: target.lat + 0.02, lng: target.lng + 0.02 } // ~2,5 km au départ
 
+  const from = sim.pos
   let speed = 0 // reste 0 à l'arrêt sur place (approche + intervention)
   if (active.status === 'EN_ROUTE' || active.status === 'EN_APPROCHE') {
     sim.pos = moveToward(sim.pos, target, SIM_STEP_METERS)
@@ -130,5 +132,7 @@ function nextSimPosition(engine: MissionEngine, sim: SimState): GpsPosition {
     speed = SIM_MOVING_SPEED_MPS
   }
 
-  return { ...sim.pos, accuracy: 4, timestamp: now, speed }
+  // Cap = direction du déplacement (null si immobile).
+  const heading = speed > 0 && haversineMeters(from, sim.pos) > 0 ? bearingDegrees(from, sim.pos) : null
+  return { ...sim.pos, accuracy: 4, timestamp: now, speed, heading }
 }

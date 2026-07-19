@@ -86,15 +86,29 @@
   - **RÈGLE** : **aucun composant React ne contient de logique TTS** ; ils n'importent jamais
     `VoiceService`. La glue est le hook `useVoice` (observe le snapshot, appelle le manager).
     Vérifiable par grep `speechSynthesis|VoiceService` dans `src/features` (doit être vide).
-  - **Câblage actuel (cycle de vie manuel)** : `announceMissionStarted` (transition →RUNNING) et
-    `announceMissionCompleted` (`completedCount===totalCount`) dans `useVoice`. `announceNextAddress`
-    et `announceCriticalAlert` **définies mais non déclenchées** (sprint suivant — cf. tasks.md).
-  - **Réglage** : `voiceEnabled: boolean` (défaut `true`) intégré à `EngineConfig` (donc réglé
-    via `SettingsModal` + `setConfig`, runtime-only). `useVoice` synchronise
-    `voiceService.setEnabled(config.voiceEnabled)`. Section « Assistance vocale » dans la modale
-    (toggle + bouton « Tester la voix » → « Bienvenue dans RECA Operator. »).
-  - **Choix** : la détection reste **hors du `MissionEngine`** (préserve sa pureté/généricité) ;
-    la glue vit dans `useVoice`. Migration prévue vers des événements de domaine émis par le moteur.
+  - **Sprint 005 — annonces automatiques par événements** : le `MissionEngine` émet un **bus
+    d'événements de domaine** (`onEvent(listener)` / type `MissionEvent`), **séparé du snapshot**
+    et **neutre** (le moteur n'appelle jamais la voix) : `MISSION_STARTED` (play frais),
+    `ACTIVE_MISSION_CHANGED {ordre,address}` (nouveau stop EN_ROUTE), `APPROACH_ENTERED {ordre,note}`
+    (EN_ROUTE→EN_APPROCHE), `RESIDENCE_SIDE {ordre,side}` (fiable, 1×/engagement), `MISSION_COMPLETED`
+    (tous finaux, garde `completedEmitted`).
+  - **Pont** : `features/mission/hooks/useVoiceBridge.ts` s'abonne à `engine.onEvent` et **route**
+    chaque événement vers un handler du manager (aucune décision dans le pont). Il **remplace**
+    `core/voice/useVoice.ts` (**supprimé**) ; `useMissionEngine` expose `subscribeEvents = engine.onEvent`.
+  - **Décision + anti-répétition = 100 % dans `VoiceAnnouncementManager`** : handlers
+    `onMissionStarted/onActiveMissionChanged/onResidenceSide/onCriticalAlert/onMissionCompleted`,
+    chacun gate sur (catégorie activée) + (déjà joué ? via `Set<ordre>`/drapeaux) ; `reset()` au
+    démarrage. `onMissionStarted` appelle `reset()`. `setCategories()` reçoit les 5 flags.
+  - **Gauche/droite** : `geo.residenceSide(position,target,distance)` + `geo.bearingDegrees` ;
+    `heading` ajouté à `GpsPosition`, capté par `useGeolocation` (fallback dérivé du déplacement),
+    simulé dans `useMissionEngine`. Retourne `null` (silence) si non fiable (cap inconnu, lent,
+    trop loin, angle ambigu). Seuils : constantes `SIDE_*` dans `config.ts` (réglable en code,
+    **hors UI**). NB : approche frontale (sim/route droite) → pas d'annonce de côté (normal).
+  - **Réglages** : master `voiceEnabled` + **5 catégories** `voiceStart/voiceNextAddress/voiceSide/
+    voiceAlerts/voiceEnd` (booléens dans `EngineConfig`, défaut `true`), activables indépendamment
+    dans `SettingsModal` (section « Assistance vocale » : master + 5 toggles + « Tester la voix »).
+  - **Note** : le `MissionEngine` reste **pur** (émet des événements neutres) — c'est la migration
+    anticipée depuis le Sprint 004. La détection ne vit plus dans la glue mais dans le moteur.
 - **Source de données = CSV statique** `public/demo/route.csv`, chargé au démarrage. Aucune
   base permanente pour la tournée à ce stade, aucune communication avec RECA App.
 - **Parseur CSV tolérant** (`services/routeCsv.ts`) : séparateur `;` ou `,` auto-détecté,

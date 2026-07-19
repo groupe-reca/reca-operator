@@ -8,7 +8,7 @@ import { DevControlBar } from '../components/DevControlBar'
 import { ProblemModal } from '../components/ProblemModal'
 import { SettingsModal } from '../components/SettingsModal'
 import { useMissionEngine } from '../hooks/useMissionEngine'
-import { useVoice } from '@/core/voice/useVoice'
+import { useVoiceBridge } from '../hooks/useVoiceBridge'
 import { formatAccuracy } from '../domain/format'
 import type { ProblemCode } from '../domain/problemCodes'
 
@@ -20,12 +20,10 @@ export function MissionPage() {
 
   const running = snapshot.phase === 'RUNNING'
 
-  // Couche voix (glue) : décide des annonces à partir de l'état du moteur.
-  const voice = useVoice({
-    voiceEnabled: snapshot.config.voiceEnabled,
-    running,
-    completedCount: snapshot.completedCount,
-    totalCount: snapshot.totalCount,
+  // Couche voix (glue) : route les événements du moteur vers le manager d'annonces.
+  const voice = useVoiceBridge({
+    subscribeEvents: engine.subscribeEvents,
+    config: snapshot.config,
   })
 
   const handleSelectProblem = (code: ProblemCode) => {

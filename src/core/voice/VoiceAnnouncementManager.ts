@@ -2,48 +2,102 @@ import { voiceService } from './VoiceService'
 import type { VoiceService } from './VoiceService'
 
 /**
- * VoiceAnnouncementManager — **décideur** des annonces vocales.
+ * VoiceAnnouncementManager — **décideur** des annonces vocales et **seul** endroit
+ * où la logique d'annonce vit.
  *
- * Les composants React ne déclenchent jamais la voix directement : ils émettent
- * des événements, et ce gestionnaire décide s'il faut parler puis délègue à
- * `VoiceService`. C'est le **point de passage obligatoire** de toute annonce.
+ *     MissionEngine → (événements) → VoiceAnnouncementManager → VoiceService → TTS
  *
- *     MissionEngine → VoiceAnnouncementManager → VoiceService → TTS du téléphone
+ * Les composants React ne déclenchent jamais la voix : le moteur émet des
+ * événements neutres, un pont les route vers les handlers ci-dessous, et le
+ * gestionnaire décide s'il faut parler selon trois critères :
+ *   1. la catégorie est-elle activée dans les réglages ?
+ *   2. l'annonce a-t-elle déjà été jouée ? (anti-répétition)
+ *   3. les conditions sont-elles réunies ? (ex. note non vide)
  *
- * Ce découpage permettra d'ajouter de nouveaux événements (et une logique de
- * décision anti-répétition) sans toucher à l'interface.
+ * Le master on/off passe par `VoiceService.isEnabled()` (gate de `speak`).
+ * Générique : aucune dépendance à `features/`.
  *
- * Annonces prévues aux prochaines phases (NON implémentées ici) :
- *   - Résidence à gauche / à droite
- *   - Arrivée détectée
- *   - Intervention commencée / terminée
- *   - Route terminée
+ * Annonces prévues aux prochains sprints (NON implémentées) : arrivée détectée,
+ * intervention commencée/terminée, résidence ignorée, retour vers un problème.
  */
+export type VoiceCategories = {
+  start: boolean
+  nextAddress: boolean
+  side: boolean
+  alerts: boolean
+  end: boolean
+}
+
+const ALL_ON: VoiceCategories = {
+  start: true,
+  nextAddress: true,
+  side: true,
+  alerts: true,
+  end: true,
+}
+
 export class VoiceAnnouncementManager {
   private readonly voice: VoiceService
+  private categories: VoiceCategories = { ...ALL_ON }
+
+  // État anti-répétition (réinitialisé à chaque nouvelle mission).
+  private missionCompletedDone = false
+  private readonly announcedNext = new Set<number>()
+  private readonly announcedSide = new Set<number>()
+  private readonly announcedAlert = new Set<number>()
 
   constructor(voice: VoiceService) {
     this.voice = voice
   }
 
-  /** Point d'étranglement unique — futur emplacement de la logique de décision. */
+  /** Active/désactive chaque catégorie d'annonce (depuis les réglages). */
+  setCategories(categories: VoiceCategories): void {
+    this.categories = categories
+  }
+
+  /** Réarme l'anti-répétition (nouvelle mission). */
+  reset(): void {
+    this.missionCompletedDone = false
+    this.announcedNext.clear()
+    this.announcedSide.clear()
+    this.announcedAlert.clear()
+  }
+
+  /** Point d'étranglement unique vers le TTS. */
   private say(message: string): void {
     this.voice.speak(message)
   }
 
-  announceMissionStarted(): void {
+  // --- Handlers d'événements (décision centralisée) ------------------------
+
+  onMissionStarted(): void {
+    this.reset() // nouvelle mission : on repart d'une ardoise vierge
+    if (!this.categories.start) return
     this.say('Mission démarrée. Bonne route.')
   }
 
-  announceNextAddress(address: string): void {
+  onActiveMissionChanged(ordre: number, address: string): void {
+    if (!this.categories.nextAddress || this.announcedNext.has(ordre)) return
+    this.announcedNext.add(ordre)
     this.say(`Prochaine adresse : ${address}.`)
   }
 
-  announceCriticalAlert(message: string): void {
+  onResidenceSide(ordre: number, side: 'left' | 'right'): void {
+    if (!this.categories.side || this.announcedSide.has(ordre)) return
+    this.announcedSide.add(ordre)
+    this.say(side === 'left' ? 'Résidence à gauche.' : 'Résidence à droite.')
+  }
+
+  onCriticalAlert(ordre: number, note: string): void {
+    const message = note.trim()
+    if (!this.categories.alerts || !message || this.announcedAlert.has(ordre)) return
+    this.announcedAlert.add(ordre)
     this.say(`Attention. ${message}`)
   }
 
-  announceMissionCompleted(): void {
+  onMissionCompleted(): void {
+    if (!this.categories.end || this.missionCompletedDone) return
+    this.missionCompletedDone = true
     this.say('Mission terminée. Bon travail.')
   }
 }

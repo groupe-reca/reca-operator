@@ -13,6 +13,8 @@ export type GpsPosition = LatLng & {
   timestamp: number
   /** Vitesse en m/s (`coords.speed`), ou null si l'appareil ne la fournit pas. */
   speed: number | null
+  /** Cap en degrés (0–360, sens horaire depuis le nord), ou null si inconnu. */
+  heading: number | null
 }
 
 /**

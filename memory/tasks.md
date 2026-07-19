@@ -73,6 +73,21 @@
   exacts routés par le manager + gate `speak` (rien quand désactivé) ; grep : aucun TTS dans
   `src/features`.
 
+- [x] **Sprint 005 — Assistance vocale Phase 3 (annonces automatiques GPS)** (`feat/integration-tts-vocale`)
+  Le moteur émet désormais un **bus d'événements de domaine** (`onEvent`/`MissionEvent` :
+  `MISSION_STARTED`, `ACTIVE_MISSION_CHANGED`, `APPROACH_ENTERED`, `RESIDENCE_SIDE`,
+  `MISSION_COMPLETED`) — neutres, le moteur n'appelle jamais la voix. Détection **gauche/droite**
+  via cap GPS (`geo.residenceSide` + `bearingDegrees`, `heading` ajouté à `GpsPosition` et capté
+  par `useGeolocation`) — silence si non fiable. **Toute la décision** (catégorie activée +
+  **anti-répétition** par `Set<ordre>` + drapeaux) est centralisée dans `VoiceAnnouncementManager`
+  (handlers `onMissionStarted/onActiveMissionChanged/onResidenceSide/onCriticalAlert/onMissionCompleted`,
+  `setCategories`, `reset`). Nouveau pont `features/mission/hooks/useVoiceBridge.ts` (route les
+  événements → manager ; **remplace** `core/voice/useVoice.ts`, supprimé). 5 catégories réglables
+  indépendamment (`voiceStart/NextAddress/Side/Alerts/End` dans `EngineConfig`) + section
+  « Assistance vocale » enrichie dans `SettingsModal`. Vérifié : `tsc -b` OK, `eslint` OK ;
+  headless (tsx) — géométrie G/D, dédup+catégories du manager, et séquence d'événements exacte
+  (STARTED×1, CHANGED×2, APPROACH×2, COMPLETED×1) ; grep : aucun TTS dans les composants.
+
 ## Abandonnées / en suspens
 
 - [ ] **tache4 — Carte Mapbox interactive** (`.input/tache4.md`, maquette `.input/design-v3.png`)
@@ -99,12 +114,11 @@
   seule. À synchroniser plus tard (Supabase / module Routes) pour les statistiques.
 - [ ] **Notes ATTENTION réelles** : actuellement fictives (`services/attentionFixtures.ts`).
   À alimenter depuis le contrat de la résidence quand le module Routes sera branché.
-- [ ] **Voix — sprint suivant** : brancher `announceNextAddress` (changement de mission
-  active), `announceCriticalAlert` (notes ATTENTION), et les annonces prévues (résidence
-  gauche/droite, arrivée détectée, intervention commencée/terminée, route terminée). Idéalement
-  via des **événements de domaine émis par `MissionEngine`** consommés par
-  `VoiceAnnouncementManager` (plutôt que la glue `useVoice` actuelle). Ajouter la logique de
-  décision anti-répétition dans le `say()` du manager.
+- [ ] **Voix — annonces futures** (préparées, non implantées) : arrivée détectée, intervention
+  commencée/terminée, résidence ignorée, retour vers une résidence problématique. Ajouter les
+  événements moteur correspondants + handlers dans `VoiceAnnouncementManager` + catégories dans
+  `EngineConfig`/`SettingsModal`. (Le bus d'événements et l'anti-répétition existent déjà —
+  Sprint 005.)
 - [ ] **Voix — accès prod aux réglages** : le toggle « Assistance vocale » n'est atteignable
   que via `SettingsModal`, ouverte par la `DevControlBar` (dev only). Prévoir un accès aux
   réglages hors mode dev. Envisager aussi un plugin TTS natif (Capacitor) derrière

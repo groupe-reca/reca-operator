@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { haversineMeters } from '../domain/geo'
+import { bearingDegrees, haversineMeters } from '../domain/geo'
 import type { GpsPosition } from '../domain/types'
 
 type GeolocationState = {
@@ -18,6 +18,17 @@ function deriveSpeed(prev: GpsPosition | null, pos: GeolocationPosition): number
   if (dtSeconds <= 0) return null
   const meters = haversineMeters(prev, { lat: pos.coords.latitude, lng: pos.coords.longitude })
   return meters / dtSeconds
+}
+
+/**
+ * Cap dérivé (0–360°) de la direction de déplacement quand l'appareil ne fournit
+ * pas `coords.heading`. Retourne null si le déplacement est trop faible (bruit).
+ */
+function deriveHeading(prev: GpsPosition | null, pos: GeolocationPosition): number | null {
+  if (!prev) return null
+  const to = { lat: pos.coords.latitude, lng: pos.coords.longitude }
+  if (haversineMeters(prev, to) < 2) return null
+  return bearingDegrees(prev, to)
 }
 
 /**
@@ -43,6 +54,7 @@ export function useGeolocation(enabled: boolean): GeolocationState {
         accuracy: pos.coords.accuracy,
         timestamp: pos.timestamp,
         speed: pos.coords.speed ?? deriveSpeed(lastRef.current, pos),
+        heading: pos.coords.heading ?? deriveHeading(lastRef.current, pos),
       }
       lastRef.current = next
       setPosition(next)

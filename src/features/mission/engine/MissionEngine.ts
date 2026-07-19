@@ -1,6 +1,7 @@
 import { DEFAULT_ENGINE_CONFIG } from '../domain/config'
 import type { EngineConfig } from '../domain/config'
-import { estimateEtaMinutes, haversineMeters, metersPerSecondToKmh } from '../domain/geo'
+import { estimateEtaMinutes, haversineMeters, metersPerSecondToKmh, residenceSide } from '../domain/geo'
+import { splitAddress } from '../domain/format'
 import type { GpsPosition, Mission, MissionPhase, Stop } from '../domain/types'
 import type { MissionStatus } from '../domain/status'
 import type { MissionLogEntry } from '../domain/log'
@@ -78,9 +79,25 @@ type ActiveTimers = {
   departStartClock: number | null
   /** Heure murale d'arrivée (Date.now) pour le journal. */
   arrivedAtWall: number | null
+  /** Le côté gauche/droite a-t-il déjà été émis pour cet engagement ? */
+  sideEmitted: boolean
 }
 
 type Listener = () => void
+
+/**
+ * Événements de domaine émis par le moteur — **génériques**, sans sémantique voix
+ * ni « déneigement ». Consommés (hors moteur) par la couche voix. Le moteur ne
+ * décide jamais de parler : il constate et signale.
+ */
+export type MissionEvent =
+  | { type: 'MISSION_STARTED' }
+  | { type: 'ACTIVE_MISSION_CHANGED'; ordre: number; address: string }
+  | { type: 'APPROACH_ENTERED'; ordre: number; note: string }
+  | { type: 'RESIDENCE_SIDE'; ordre: number; side: 'left' | 'right' }
+  | { type: 'MISSION_COMPLETED' }
+
+type EventListener = (event: MissionEvent) => void
 
 const EMPTY_SNAPSHOT: MissionSnapshot = {
   phase: 'IDLE',
@@ -108,7 +125,11 @@ export class MissionEngine {
   private timers: ActiveTimers | null = null
 
   private listeners = new Set<Listener>()
+  private eventListeners = new Set<EventListener>()
   private snapshot: MissionSnapshot = EMPTY_SNAPSHOT
+
+  /** Garde : la fin de mission n'est signalée qu'une seule fois. */
+  private completedEmitted = false
 
   // --- Abonnement (useSyncExternalStore) -----------------------------------
 
@@ -120,6 +141,19 @@ export class MissionEngine {
   }
 
   getSnapshot = (): MissionSnapshot => this.snapshot
+
+  // --- Bus d'événements de domaine (consommé par la couche voix) -----------
+
+  onEvent = (listener: EventListener): (() => void) => {
+    this.eventListeners.add(listener)
+    return () => {
+      this.eventListeners.delete(listener)
+    }
+  }
+
+  private emitEvent(event: MissionEvent): void {
+    for (const listener of this.eventListeners) listener(event)
+  }
 
   // --- Paramètres réglables (runtime) --------------------------------------
 
@@ -145,14 +179,17 @@ export class MissionEngine {
   }
 
   play(): void {
-    if (this.phase === 'IDLE' || this.phase === 'STOPPED') {
+    const freshStart = this.phase === 'IDLE' || this.phase === 'STOPPED'
+    if (freshStart) {
       this.stops = this.stops.map(resetStop)
       this.clock = 0
       this.timers = null
       this.log = []
+      this.completedEmitted = false
     }
     this.lastTickMs = null
     this.phase = 'RUNNING'
+    if (freshStart) this.emitEvent({ type: 'MISSION_STARTED' })
     this.evaluate()
     this.emit()
   }
@@ -193,6 +230,7 @@ export class MissionEngine {
     active.problemCode = code
     active.completedAt = Date.now()
     this.timers = null
+    this.checkCompletion()
     this.evaluate()
     this.emit()
   }
@@ -239,6 +277,11 @@ export class MissionEngine {
           timers.arrivedClock = this.clock
           timers.arrivedAtWall = Date.now()
           timers.approachStartClock = this.clock
+          this.emitEvent({
+            type: 'APPROACH_ENTERED',
+            ordre: active.ordre,
+            note: attentionNotesFor(active.ordre).join(' '),
+          })
         }
         break
 
@@ -275,6 +318,25 @@ export class MissionEngine {
       default:
         break
     }
+
+    this.detectResidenceSide(active, timers)
+  }
+
+  /**
+   * Détecte une seule fois le côté gauche/droite du stop actif, quand le calcul
+   * est fiable (cap connu, en mouvement, assez proche, angle non ambigu).
+   */
+  private detectResidenceSide(active: Stop, timers: ActiveTimers): void {
+    if (timers.sideEmitted || !this.position) return
+    if (active.status !== 'EN_ROUTE' && active.status !== 'EN_APPROCHE') return
+    const distance = active.distanceMeters
+    if (distance === null) return
+
+    const side = residenceSide(this.position, active, distance)
+    if (!side) return
+
+    timers.sideEmitted = true
+    this.emitEvent({ type: 'RESIDENCE_SIDE', ordre: active.ordre, side })
   }
 
   /**
@@ -305,6 +367,11 @@ export class MissionEngine {
     if (current) current.status = 'EN_ATTENTE'
     nearest.status = 'EN_ROUTE'
     this.timers = newTimers(nearest.ordre, this.clock)
+    this.emitEvent({
+      type: 'ACTIVE_MISSION_CHANGED',
+      ordre: nearest.ordre,
+      address: splitAddress(nearest.adresse).street,
+    })
   }
 
   private completeActive(): void {
@@ -322,6 +389,16 @@ export class MissionEngine {
     active.status = 'TERMINE'
     active.completedAt = Date.now()
     this.timers = null
+    this.checkCompletion()
+  }
+
+  /** Signale une seule fois la fin de mission quand tous les stops sont finaux. */
+  private checkCompletion(): void {
+    if (this.completedEmitted || this.stops.length === 0) return
+    if (this.stops.every((s) => FINAL.has(s.status))) {
+      this.completedEmitted = true
+      this.emitEvent({ type: 'MISSION_COMPLETED' })
+    }
   }
 
   // --- Aides ----------------------------------------------------------------
@@ -370,6 +447,7 @@ export class MissionEngine {
     this.lastTickMs = null
     this.timers = null
     this.log = []
+    this.completedEmitted = false
   }
 
   // --- Snapshot -------------------------------------------------------------
@@ -471,5 +549,6 @@ function newTimers(ordre: number, clock: number): ActiveTimers {
     interventionStartClock: null,
     departStartClock: null,
     arrivedAtWall: null,
+    sideEmitted: false,
   }
 }
