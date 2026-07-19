@@ -59,6 +59,20 @@
   `tsc -b` OK, `eslint` OK, et test headless (tsx) — à 40 m, rayon 25 m → EN_ROUTE ; rayon
   porté à 60 m via `setConfig` → EN_APPROCHE.
 
+- [x] **Sprint 004 — Assistance vocale (Phases 1 & 2)** (`feat/integration-tts-vocale`)
+  Nouvelle **couche voix indépendante** `src/core/voice/` : `VoiceService` (abstraction du TTS
+  natif `speechSynthesis`, singleton `voiceService`, `initialize/speak/stop/isEnabled/setEnabled`,
+  voix fr-CA, no-op si désactivé/non supporté) ; `VoiceAnnouncementManager` (décideur, singleton
+  `voiceAnnouncements`, point de passage obligatoire, 4 méthodes announce*) ; `useVoice` (hook
+  glue). Réglage `voiceEnabled` ajouté à `EngineConfig` (défaut true) ; section « Assistance
+  vocale » dans `SettingsModal` (toggle + bouton « Tester la voix » → « Bienvenue dans RECA
+  Operator. »). **Câblage cycle de vie manuel** : `announceMissionStarted` (transition →RUNNING)
+  et `announceMissionCompleted` (completed===total) via `useVoice` ; `announceNextAddress` /
+  `announceCriticalAlert` définies mais **non déclenchées** (sprint suivant). **`MissionEngine`
+  inchangé** (reste pur). Vérifié : `tsc -b` OK, `eslint` OK, test headless (tsx) — 4 messages
+  exacts routés par le manager + gate `speak` (rien quand désactivé) ; grep : aucun TTS dans
+  `src/features`.
+
 ## Abandonnées / en suspens
 
 - [ ] **tache4 — Carte Mapbox interactive** (`.input/tache4.md`, maquette `.input/design-v3.png`)
@@ -85,3 +99,13 @@
   seule. À synchroniser plus tard (Supabase / module Routes) pour les statistiques.
 - [ ] **Notes ATTENTION réelles** : actuellement fictives (`services/attentionFixtures.ts`).
   À alimenter depuis le contrat de la résidence quand le module Routes sera branché.
+- [ ] **Voix — sprint suivant** : brancher `announceNextAddress` (changement de mission
+  active), `announceCriticalAlert` (notes ATTENTION), et les annonces prévues (résidence
+  gauche/droite, arrivée détectée, intervention commencée/terminée, route terminée). Idéalement
+  via des **événements de domaine émis par `MissionEngine`** consommés par
+  `VoiceAnnouncementManager` (plutôt que la glue `useVoice` actuelle). Ajouter la logique de
+  décision anti-répétition dans le `say()` du manager.
+- [ ] **Voix — accès prod aux réglages** : le toggle « Assistance vocale » n'est atteignable
+  que via `SettingsModal`, ouverte par la `DevControlBar` (dev only). Prévoir un accès aux
+  réglages hors mode dev. Envisager aussi un plugin TTS natif (Capacitor) derrière
+  `VoiceService` si l'app est empaquetée.

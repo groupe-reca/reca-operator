@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { Minus, Plus, RotateCcw, SlidersHorizontal, X } from 'lucide-react'
+import { Minus, Plus, RotateCcw, SlidersHorizontal, Volume2, X } from 'lucide-react'
 import { DEFAULT_ENGINE_CONFIG } from '../domain/config'
 import type { EngineConfig } from '../domain/config'
 
@@ -8,11 +8,12 @@ type SettingsModalProps = {
   open: boolean
   config: EngineConfig
   onChange: (patch: Partial<EngineConfig>) => void
+  onTestVoice: () => void
   onClose: () => void
 }
 
-/** Clés numériques réglables (le mode dev est un booléen traité à part). */
-type NumericKey = Exclude<keyof EngineConfig, 'devControls'>
+/** Clés numériques réglables (les booléens dev/voix sont traités à part). */
+type NumericKey = Exclude<keyof EngineConfig, 'devControls' | 'voiceEnabled'>
 
 type NumericField = {
   key: NumericKey
@@ -59,7 +60,7 @@ const displayValue = (config: EngineConfig, field: NumericField) =>
  * via `onChange` (→ `MissionEngine.setConfig`). Aucune persistance : un
  * rechargement rétablit les valeurs par défaut.
  */
-export function SettingsModal({ open, config, onChange, onClose }: SettingsModalProps) {
+export function SettingsModal({ open, config, onChange, onTestVoice, onClose }: SettingsModalProps) {
   // Brouillon local des champs texte : permet une saisie libre (champ vide,
   // frappe intermédiaire) sans reformater à chaque touche.
   const [draft, setDraft] = useState<Record<NumericKey, string>>(() => seedDraft(config))
@@ -148,6 +149,30 @@ export function SettingsModal({ open, config, onChange, onClose }: SettingsModal
                 checked={config.devControls}
                 onToggle={() => onChange({ devControls: !config.devControls })}
               />
+            </div>
+
+            <div className="mt-4">
+              <h3 className="mb-2 flex items-center gap-2 px-1 text-label font-semibold uppercase tracking-wide text-text-muted">
+                <Volume2 className="size-4 text-accent-strong" aria-hidden="true" />
+                Assistance vocale
+              </h3>
+              <div className="flex flex-col gap-2">
+                <ToggleRow
+                  label="Assistance vocale"
+                  hint="Annonces vocales aux moments clés (début / fin de mission)."
+                  checked={config.voiceEnabled}
+                  onToggle={() => onChange({ voiceEnabled: !config.voiceEnabled })}
+                />
+                <button
+                  type="button"
+                  onClick={onTestVoice}
+                  disabled={!config.voiceEnabled}
+                  className="flex w-full items-center justify-center gap-2 rounded-card border border-border-subtle bg-surface-card-elevated py-2.5 text-body font-medium text-text transition-colors duration-150 hover:border-accent-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Volume2 className="size-4 text-accent-strong" aria-hidden="true" />
+                  Tester la voix
+                </button>
+              </div>
             </div>
 
             <button

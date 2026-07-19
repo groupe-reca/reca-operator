@@ -73,6 +73,28 @@
   maintenue : la logique lit `this.config.*`, jamais de valeur codée en dur ; l'UI ne fait que
   lire `snapshot.config` et appeler `setConfig`. `LOW_SPEED_KMH`/`lowSpeedKmh` est exposé mais
   **toujours pas branché** dans `evaluate()` (affiché « réservé » dans l'UI).
+- **Sprint 004 — Assistance vocale (`src/core/voice/`)** : nouvelle **couche transverse
+  indépendante** (hors `features/`). Chaîne imposée :
+  `MissionEngine → VoiceAnnouncementManager → VoiceService → TTS natif du téléphone`.
+  - **`VoiceService`** : abstraction du TTS natif (Web Speech API `speechSynthesis`, moteur
+    vocal de l'OS — aucune API externe, aucune IA, aucun coût). Singleton `voiceService`.
+    `initialize/speak/stop/isEnabled/setEnabled/isSupported`, voix `fr-CA`, `speak` = `cancel`
+    puis `speak` (pas de file), no-op si non supporté/désactivé. **Seul point qui touche le TTS.**
+  - **`VoiceAnnouncementManager`** : décideur, singleton `voiceAnnouncements`. Point de passage
+    **obligatoire** des annonces (`say()` privé = futur emplacement de la logique anti-répétition).
+    Méthodes : `announceMissionStarted/announceNextAddress/announceCriticalAlert/announceMissionCompleted`.
+  - **RÈGLE** : **aucun composant React ne contient de logique TTS** ; ils n'importent jamais
+    `VoiceService`. La glue est le hook `useVoice` (observe le snapshot, appelle le manager).
+    Vérifiable par grep `speechSynthesis|VoiceService` dans `src/features` (doit être vide).
+  - **Câblage actuel (cycle de vie manuel)** : `announceMissionStarted` (transition →RUNNING) et
+    `announceMissionCompleted` (`completedCount===totalCount`) dans `useVoice`. `announceNextAddress`
+    et `announceCriticalAlert` **définies mais non déclenchées** (sprint suivant — cf. tasks.md).
+  - **Réglage** : `voiceEnabled: boolean` (défaut `true`) intégré à `EngineConfig` (donc réglé
+    via `SettingsModal` + `setConfig`, runtime-only). `useVoice` synchronise
+    `voiceService.setEnabled(config.voiceEnabled)`. Section « Assistance vocale » dans la modale
+    (toggle + bouton « Tester la voix » → « Bienvenue dans RECA Operator. »).
+  - **Choix** : la détection reste **hors du `MissionEngine`** (préserve sa pureté/généricité) ;
+    la glue vit dans `useVoice`. Migration prévue vers des événements de domaine émis par le moteur.
 - **Source de données = CSV statique** `public/demo/route.csv`, chargé au démarrage. Aucune
   base permanente pour la tournée à ce stade, aucune communication avec RECA App.
 - **Parseur CSV tolérant** (`services/routeCsv.ts`) : séparateur `;` ou `,` auto-détecté,

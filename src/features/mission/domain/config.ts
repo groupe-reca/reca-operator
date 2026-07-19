@@ -29,6 +29,9 @@ export const DEPART_DELAY_MS = 30_000
  */
 export const DEV_CONTROLS = true
 
+/** Assistance vocale (TTS) activée par défaut. Coupée → aucune annonce jouée. */
+export const VOICE_ENABLED = true
+
 /**
  * Regroupement runtime de **tous** les paramètres réglables du moteur. Le
  * `MissionEngine` en tient une copie vivante, modifiable en direct via
@@ -42,6 +45,7 @@ export type EngineConfig = {
   approachDelayMs: number
   departDelayMs: number
   devControls: boolean
+  voiceEnabled: boolean
 }
 
 /** Valeurs par défaut = les constantes ci-dessus, assemblées en objet. */
@@ -52,4 +56,5 @@ export const DEFAULT_ENGINE_CONFIG: EngineConfig = {
   approachDelayMs: APPROACH_DELAY_MS,
   departDelayMs: DEPART_DELAY_MS,
   devControls: DEV_CONTROLS,
+  voiceEnabled: VOICE_ENABLED,
 }

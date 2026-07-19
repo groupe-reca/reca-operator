@@ -8,6 +8,7 @@ import { DevControlBar } from '../components/DevControlBar'
 import { ProblemModal } from '../components/ProblemModal'
 import { SettingsModal } from '../components/SettingsModal'
 import { useMissionEngine } from '../hooks/useMissionEngine'
+import { useVoice } from '@/core/voice/useVoice'
 import { formatAccuracy } from '../domain/format'
 import type { ProblemCode } from '../domain/problemCodes'
 
@@ -17,12 +18,20 @@ export function MissionPage() {
   const [problemOpen, setProblemOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
 
+  const running = snapshot.phase === 'RUNNING'
+
+  // Couche voix (glue) : décide des annonces à partir de l'état du moteur.
+  const voice = useVoice({
+    voiceEnabled: snapshot.config.voiceEnabled,
+    running,
+    completedCount: snapshot.completedCount,
+    totalCount: snapshot.totalCount,
+  })
+
   const handleSelectProblem = (code: ProblemCode) => {
     engine.reportProblem(code)
     setProblemOpen(false)
   }
-
-  const running = snapshot.phase === 'RUNNING'
 
   return (
     <div className="flex h-[100svh] flex-col bg-surface-bg">
@@ -103,6 +112,7 @@ export function MissionPage() {
         open={settingsOpen}
         config={snapshot.config}
         onChange={engine.setConfig}
+        onTestVoice={voice.testVoice}
         onClose={() => setSettingsOpen(false)}
       />
     </div>

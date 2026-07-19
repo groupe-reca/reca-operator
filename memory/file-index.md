@@ -58,6 +58,21 @@
 - **Supprimés au Sprint 003** : `MissionHeader.tsx`, `MissionCard.tsx`, `MissionFooter.tsx`,
   `TransportControls.tsx` (remplacés par SmartCounter / CurrentMissionCard / DevControlBar).
 
+## Module transverse : Voix (`src/core/voice/`) — Sprint 004
+
+> Couche d'assistance vocale **indépendante** des features. Chaîne :
+> `MissionEngine → VoiceAnnouncementManager → VoiceService → TTS natif`. **Aucun composant
+> React ne touche le TTS** ; seul `useVoice` fait le pont (importé par `MissionPage`).
+
+- `core/voice/VoiceService.ts` — abstraction TTS (`speechSynthesis`), singleton `voiceService` ;
+  `initialize/speak/stop/isEnabled/setEnabled/isSupported`, voix `fr-CA`.
+- `core/voice/VoiceAnnouncementManager.ts` — décideur, singleton `voiceAnnouncements` ;
+  `announceMissionStarted/announceNextAddress/announceCriticalAlert/announceMissionCompleted`.
+- `core/voice/useVoice.ts` — hook glue : init, sync `voiceEnabled`, annonce début/fin de
+  mission depuis le snapshot ; retourne `testVoice()`.
+- Réglage `voiceEnabled` : dans `EngineConfig` (`features/mission/domain/config.ts`), UI dans
+  `SettingsModal` (section « Assistance vocale » + bouton « Tester la voix »).
+
 ## Partagé / transverse
 
 - **app / entrée** : `src/main.tsx`, `src/app/App.tsx`, `src/routes/router.tsx`

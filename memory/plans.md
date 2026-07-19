@@ -85,6 +85,24 @@
   permettre la saisie. Toggle « mode dev » à `false` masque la barre (donc le bouton) → note
   UX, récupérable au rechargement. TS strict `verbatimModuleSyntax` → `import type`.
 
+### Sprint 004 — Assistance vocale (Phases 1 & 2) ✅
+
+- **Objectif** : fondations de l'assistance vocale — un contremaître qui parle rarement.
+  Couche indépendante `src/core/voice/`, TTS natif du téléphone uniquement (aucune API/IA/coût).
+- **Décision client** : câblage **cycle de vie manuel** (started + completed) ; next/alert
+  définies mais non déclenchées.
+- **Étapes** : (1) `VoiceService` (abstraction `speechSynthesis`, singleton, gate enabled).
+  (2) `VoiceAnnouncementManager` (décideur, 4 annonces, `say()` étranglement). (3) `useVoice`
+  (glue : init, sync toggle, détecte début/fin depuis le snapshot). (4) `voiceEnabled` dans
+  `EngineConfig` + section « Assistance vocale » (toggle + test) dans `SettingsModal` ; branche
+  `useVoice` dans `MissionPage`. `MissionEngine` **inchangé**.
+- **Risques** : `erasableSyntaxOnly` interdit les propriétés-paramètres de constructeur (→
+  champ + assignation explicite) ; `NumericKey` de `SettingsModal` devait exclure aussi le
+  booléen `voiceEnabled` (sinon TS2362) ; `react-hooks/refs` (refs seulement dans les effets) ;
+  `core/` ne doit pas dépendre de `features/` (→ `useVoice` reçoit `running`, pas la phase).
+- **Résultat** : `tsc -b` OK, `eslint` OK ; headless (tsx) — 4 messages exacts + gate `speak` ;
+  aucun TTS dans `src/features` (grep).
+
 ---
 
 ## Actifs
