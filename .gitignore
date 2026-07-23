@@ -26,3 +26,6 @@ dist-ssr
 
 # Clés Supabase/Mapbox fournies via .input (ne pas committer)
 .input/supabase
+
+# Fichiers de sauvegarde
+*.bak
