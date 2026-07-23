@@ -99,6 +99,28 @@
   diagnostic. **Aucune logique TTS n'entre dans les composants** (règle maintenue). Vérifié :
   `tsc -b` OK, `eslint` OK.
 
+- [x] **Sprint — Intégration RECA App (source de données Supabase)** (`feat/connexion-reca-app`)
+  Remplacé la source CSV temporaire par les données officielles Supabase (Mission/MissionItems),
+  même auth que RECA App, avec vérification du rôle opérateur et write-back des statuts. **Seam
+  unique** : le `queryFn` de `useMissionEngine` passe de `loadDemoMission` à
+  `loadAssignedMission` (`services/missionSupabase.ts`) — moteur GPS, UI et animations inchangés.
+  Fait : (1) `missionSupabase.loadAssignedMission()` = résolution `auth.uid → employees.user_id
+  → missions.operator_id`, puis `mission_items` joints aux contrats (adresse, GPS,
+  `message_operateur`, client) ; `null` → écran « Aucune mission assignée » + Actualiser.
+  (2) `services/missionMapping.ts` **pur** (mapItemToStop + correspondances de statuts).
+  (3) Moteur : `Stop` gagne `missionItemId` + `operatorMessage` ; **reprise** des statuts
+  terminaux (`rehydrateStop` dans `loadMission`/`play`) ; ATTENTION = `operatorMessage` du
+  contrat ; événement neutre `STOP_FINALIZED` émis depuis `completeActive`/`reportProblem`.
+  (4) Write-back via point unique `services/missionSync.persistItemStatus` + pont
+  `hooks/useMissionSync.ts` (bannière « Connexion perdue »). (5) Auth : garde `RequireOperator`
+  → écran `AccessDenied` si rôle ≠ operateur ; `PREVIEW_BYPASS` supprimé. (6) Supprimé
+  `public/demo/route.csv`, `routeCsv.ts`, `attentionFixtures.ts`. **Décisions** : problème →
+  statut `a_reprendre` seulement (pas de colonne `code_probleme`) ; header riche du screenshot
+  **non** construit (interface actuelle conservée). Vérifié : `tsc -b` OK, `eslint` OK,
+  `npm run build` OK, tests headless (tsx) — mappers + reprise (TERMINE conservé, en_attente
+  redevient actif via GPS). **Dépend de** la PR reca-app `feat/operator-integration` (rôle
+  operateur + RLS écriture opérateur) appliquée au Supabase partagé + `employees.user_id` peuplé.
+
 ## Abandonnées / en suspens
 
 - [ ] **tache4 — Carte Mapbox interactive** (`.input/tache4.md`, maquette `.input/design-v3.png`)

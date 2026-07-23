@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Loader2, MapPin, TriangleAlert } from 'lucide-react'
+import { Loader2, MapPin, RefreshCw, TriangleAlert, WifiOff } from 'lucide-react'
 import { SmartCounter } from '../components/SmartCounter'
 import { CurrentMissionCard } from '../components/CurrentMissionCard'
 import { StopListHeader } from '../components/StopListHeader'
@@ -7,8 +7,10 @@ import { StopList } from '../components/StopList'
 import { DevControlBar } from '../components/DevControlBar'
 import { ProblemModal } from '../components/ProblemModal'
 import { SettingsModal } from '../components/SettingsModal'
+import { Button } from '@/components/ui/Button'
 import { useMissionEngine } from '../hooks/useMissionEngine'
 import { useVoiceBridge } from '../hooks/useVoiceBridge'
+import { useMissionSync } from '../hooks/useMissionSync'
 import { formatAccuracy } from '../domain/format'
 import type { ProblemCode } from '../domain/problemCodes'
 
@@ -26,9 +28,17 @@ export function MissionPage() {
     config: snapshot.config,
   })
 
+  // Synchro Supabase (glue) : persiste chaque changement de statut terminal.
+  const sync = useMissionSync({ subscribeEvents: engine.subscribeEvents })
+
   const handleSelectProblem = (code: ProblemCode) => {
     engine.reportProblem(code)
     setProblemOpen(false)
+  }
+
+  // Aucune mission assignée : écran dédié, aucune autre interface.
+  if (engine.noMission) {
+    return <NoMissionScreen onRefresh={engine.refetchMission} isRefreshing={engine.isFetchingMission} />
   }
 
   return (
@@ -48,6 +58,14 @@ export function MissionPage() {
         </div>
         <SmartCounter counter={snapshot.counter} />
       </header>
+
+      {/* Bannière : perte de connexion (session conservée, reconnexion en cours). */}
+      {sync.connectionLost && (
+        <div className="mx-4 mb-2 flex items-center gap-2 rounded-control border border-status-warning/30 bg-status-warning/10 px-3 py-2 text-label text-status-warning">
+          <WifiOff className="size-3.5 shrink-0" aria-hidden="true" />
+          Connexion perdue. Tentative de reconnexion…
+        </div>
+      )}
 
       {/* Contenu défilable */}
       <main className="flex-1 overflow-y-auto px-4 pb-3">
@@ -114,6 +132,34 @@ export function MissionPage() {
         voiceName={voice.voiceName}
         onClose={() => setSettingsOpen(false)}
       />
+    </div>
+  )
+}
+
+function NoMissionScreen({
+  onRefresh,
+  isRefreshing,
+}: {
+  onRefresh: () => void
+  isRefreshing: boolean
+}) {
+  return (
+    <div className="flex min-h-[100svh] flex-col items-center justify-center bg-surface-bg px-6 text-center">
+      <div className="w-full max-w-[420px] rounded-card border border-border-subtle bg-surface-card p-8">
+        <h1 className="text-section font-semibold text-text">Aucune mission assignée</h1>
+        <p className="mt-2 text-body text-text-muted">
+          Veuillez communiquer avec votre répartiteur.
+        </p>
+        <Button
+          variant="secondary"
+          className="mt-6 w-full"
+          isLoading={isRefreshing}
+          onClick={onRefresh}
+        >
+          <RefreshCw className="size-4" aria-hidden="true" />
+          Actualiser
+        </Button>
+      </div>
     </div>
   )
 }

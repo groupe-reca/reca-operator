@@ -16,7 +16,8 @@
 - **hooks** : `hooks/useLogin.ts`, `hooks/useLogout.ts`, `hooks/useSession.ts`
   (`useQuery(['session'])` + `onAuthStateChange`)
 - **components** : `components/LoginForm.tsx`, `components/RequireAuth.tsx`
-  (exporte aussi `RequireRole`)
+  (exporte aussi `RequireRole` **et `RequireOperator`** — rend `AccessDenied` si rôle ≠ operateur ;
+  `PREVIEW_BYPASS` supprimé), `components/AccessDenied.tsx` (écran « Accès refusé »)
 - **pages** : `pages/LoginPage.tsx`
 
 ## Module : Mission (`src/features/mission/`) — cœur de l'app
@@ -25,10 +26,12 @@
   - `engine/MissionEngine.ts` — service : GPS reçu, distances, tri par proximité, machine à
     états, chronos (horloge virtuelle), journal ; `subscribe`/`getSnapshot` (pattern store) ;
     **copie vivante des paramètres** (`config`) + `getConfig`/`setConfig` (tache5).
-    Exporte `MissionSnapshot` (inclut `config`), `ActiveMissionView`, `CounterView`.
+    **Reprise** : `rehydrateStop` conserve les statuts terminaux persistés (`loadMission`/`play`).
+    **Write-back** : émet l'événement neutre `STOP_FINALIZED {missionItemId, outcome}` depuis
+    `completeActive`/`reportProblem`. Exporte `MissionSnapshot`, `ActiveMissionView`, `CounterView`.
 - **domain** (logique pure, générique Signa) :
-  - `domain/types.ts` — `LatLng`, `GpsPosition` (avec `speed`), `Stop` (avec `problemCode`),
-    `Mission`, `MissionPhase`
+  - `domain/types.ts` — `LatLng`, `GpsPosition` (avec `speed`/`heading`), `Stop` (avec
+    `problemCode`, **`missionItemId`**, **`operatorMessage`**), `Mission`, `MissionPhase`
   - `domain/status.ts` — union `MissionStatus` (9 statuts), `STATUS_CONFIG`, `restingIconFor`
   - `domain/config.ts` — constantes de **défaut** : `ARRIVAL_RADIUS_METERS`, `LOW_SPEED_KMH`,
     `DEPART_SPEED_KMH`, `APPROACH_DELAY_MS`, `DEPART_DELAY_MS`, `DEV_CONTROLS` ; + type
@@ -39,22 +42,33 @@
     `metersPerSecondToKmh`, constante `ASSUMED_SPEED_KMH`
   - `domain/format.ts` — `formatCoords`, `formatAccuracy`, `formatClock`, `formatTimeOfDay`,
     `formatDistance`, `formatEta`, `formatElapsed`, `formatStopwatch`, `splitAddress`
-- **services** : `services/routeCsv.ts` — `loadDemoMission()` (parseur tolérant `;`/`,`) ;
-  `services/attentionFixtures.ts` — `attentionNotesFor(ordre)` (consignes ATTENTION fictives)
+- **services** (source de données = Supabase Mission/MissionItems) :
+  - `services/missionMapping.ts` — **pur, testable** (aucun import Supabase) : `mapItemToStop`,
+    `mapStatutToInternal` (lecture), `outcomeToStatut` (écriture), types `MissionItemStatut`/
+    `MissionItemJoinRow`.
+  - `services/missionSupabase.ts` — `loadAssignedMission()` : résout l'opérateur
+    (`auth.uid → employees.user_id → missions.operator_id`), charge Mission + `mission_items`
+    joints aux contrats. `null` = aucune mission assignée.
+  - `services/missionSync.ts` — `persistItemStatus(id, statut)` : **point d'écriture unique**
+    vers `mission_items` (prêt hors-ligne, ne lève jamais).
+  - (**Supprimés** au sprint Intégration RECA App : `services/routeCsv.ts`,
+    `services/attentionFixtures.ts`.)
 - **hooks** :
   - `hooks/useGeolocation.ts` — GPS réel (`watchPosition` + vitesse `coords.speed`/dérivée)
   - `hooks/useMissionEngine.ts` — **adaptateur mince** : instancie l'engine, `useSyncExternalStore`,
-    pousse GPS + tick 1 s, charge le CSV, simulateur `?sim=1` (cycle complet). Réexpose
-    snapshot + commandes (`play`/`pause`/`stop`/`reportProblem`) + `devControls` + `config` +
-    `setConfig` (tache5).
+    pousse GPS + tick 1 s, charge la **Mission Supabase** (`loadAssignedMission`), simulateur
+    `?sim=1` (cycle complet). Réexpose snapshot + commandes + `devControls` + `config`/`setConfig`
+    + **`noMission`/`isFetchingMission`/`refetchMission`**.
+  - `hooks/useMissionSync.ts` — pont write-back (glue) : abonné à `engine.onEvent`, route
+    `STOP_FINALIZED` → `persistItemStatus` ; expose `connectionLost` (bannière « Connexion perdue »).
 - **components** (présentationnels) : `components/SmartCounter.tsx`,
   `components/CurrentMissionCard.tsx`, `components/StopListHeader.tsx`,
   `components/StopList.tsx`, `components/StopRow.tsx`, `components/ProblemModal.tsx`
   (8 codes), `components/SettingsModal.tsx` (réglage runtime de tous les paramètres — tache5),
   `components/DevControlBar.tsx` (Play/Pause/Stop/Problème/**Réglages**, dev only),
   `components/statusTone.ts` (tone → classes)
-- **pages** : `pages/MissionPage.tsx` (layout plein écran)
-- **data** : `public/demo/route.csv` (source de la tournée — hors `src/`)
+- **pages** : `pages/MissionPage.tsx` (layout plein écran ; écrans « Aucune mission assignée » +
+  bannière « Connexion perdue » ; branche `useMissionSync`)
 - **Supprimés au Sprint 003** : `MissionHeader.tsx`, `MissionCard.tsx`, `MissionFooter.tsx`,
   `TransportControls.tsx` (remplacés par SmartCounter / CurrentMissionCard / DevControlBar).
 
@@ -74,7 +88,8 @@
 - Le pont React vit **côté feature** : `features/mission/hooks/useVoiceBridge.ts` — init +
   sync (master + catégories depuis `config`) + abonnement `engine.onEvent` → handlers du manager ;
   retourne `testVoice()`. (Remplace l'ancien `core/voice/useVoice.ts`, **supprimé** au Sprint 005.)
-- Bus d'événements : `MissionEngine.onEvent` + type `MissionEvent` (`engine/MissionEngine.ts`).
+- Bus d'événements : `MissionEngine.onEvent` + type `MissionEvent` (`engine/MissionEngine.ts`)
+  — inclut aussi `STOP_FINALIZED` (consommé par `useMissionSync`, hors voix).
   `useMissionEngine` réexpose `subscribeEvents`.
 - Réglages `voiceEnabled` + 5 catégories (`voiceStart/voiceNextAddress/voiceSide/voiceAlerts/
   voiceEnd`) dans `EngineConfig` (`domain/config.ts`) ; seuils G/D `SIDE_*` (hors UI). UI dans

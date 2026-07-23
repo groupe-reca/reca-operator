@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { loadDemoMission } from '../services/routeCsv'
+import { loadAssignedMission } from '../services/missionSupabase'
 import { useGeolocation } from './useGeolocation'
 import { MissionEngine } from '../engine/MissionEngine'
 import { bearingDegrees, haversineMeters } from '../domain/geo'
@@ -48,10 +48,11 @@ export function useMissionEngine() {
 
   const snapshot = useSyncExternalStore(engine.subscribe, engine.getSnapshot)
 
-  // Chargement de la tournée (CSV statique) → moteur.
+  // Chargement de la Mission assignée depuis Supabase → moteur. `null` = aucune
+  // mission assignée (query réussie mais sans données).
   const missionQuery = useQuery({
-    queryKey: ['demo-mission'],
-    queryFn: loadDemoMission,
+    queryKey: ['assigned-mission'],
+    queryFn: loadAssignedMission,
     staleTime: Infinity,
   })
 
@@ -85,6 +86,12 @@ export function useMissionEngine() {
     snapshot,
     isLoading: missionQuery.isLoading,
     error: missionQuery.error,
+    // Query réussie mais sans mission assignée → écran dédié « Aucune mission ».
+    noMission: missionQuery.isSuccess && missionQuery.data === null,
+    isFetchingMission: missionQuery.isFetching,
+    refetchMission: () => {
+      void missionQuery.refetch()
+    },
     gpsError: geo.error,
     gpsSupported: geo.isSupported,
     devControls: snapshot.config.devControls,

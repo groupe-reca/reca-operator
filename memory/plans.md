@@ -121,6 +121,31 @@
   séquence d'événements exacte (STARTED×1, CHANGED×2, APPROACH×2, COMPLETED×1) ; grep : aucun TTS
   dans les composants.
 
+### Sprint — Intégration RECA App (source de données Supabase) ✅
+
+- **Objectif** : remplacer la source CSV temporaire par l'architecture officielle de RECA App —
+  auth partagée, vérification du rôle opérateur, chargement automatique de la Mission assignée +
+  ses MissionItems, affichage inchangé, write-back des statuts. RECA App = maître ; RECA Operator =
+  terminal terrain qui ne connaît que `Mission` + `MissionItems`.
+- **Décisions (validées)** : (1) faire reca-operator **+** les migrations reca-app dans une branche
+  séparée (`feat/operator-integration`) ; (2) problème → statut `a_reprendre` seulement (pas de
+  colonne `code_probleme`) ; (3) reprise = **conserver** les statuts terminaux persistés.
+- **Réalités schéma** : `mission_items` mince (détails via jointure `contracts`) ;
+  `missions.operator_id → employees(id)` (`employees.user_id` jamais peuplé → à seeder) ;
+  RLS écriture admin-only (→ migration) ; rôle `operateur` absent du CHECK (→ migration).
+- **Étapes reca-operator** : `missionMapping.ts` (pur) + `missionSupabase.ts` (fetch) ;
+  `Stop` += `missionItemId`/`operatorMessage` ; moteur `rehydrateStop` + événement `STOP_FINALIZED` ;
+  ATTENTION depuis `operatorMessage` ; `missionSync.ts` + `useMissionSync.ts` (write-back + bannière) ;
+  `useMissionEngine` swap `queryFn` + `noMission`/`refetchMission` ; `RequireOperator` + `AccessDenied` ;
+  écran « Aucune mission » ; suppression CSV/fixtures + `PREVIEW_BYPASS`.
+- **Étapes reca-app** (repo distinct) : migration rôle `operateur` ; migration policy RLS
+  `mission_items_update_operator`.
+- **Risques** : `play()` re-réinitialisait via `resetStop` (→ `rehydrateStop` aussi dans `play`) ;
+  `import.meta.env` indisponible sous tsx (→ maps pures isolées de `supabaseClient` pour les tests) ;
+  garde mono-écran (→ `AccessDenied` rendu, pas de redirection).
+- **Résultat** : `tsc -b` OK, `eslint` OK, `npm run build` OK, headless (tsx) — mappers + reprise.
+  Dépend de la PR reca-app appliquée au Supabase partagé + `employees.user_id` peuplé.
+
 ---
 
 ## Actifs

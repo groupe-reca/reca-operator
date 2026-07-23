@@ -23,12 +23,16 @@ export type GpsPosition = LatLng & {
  * libre venue de la source de données.
  */
 export type Stop = {
+  /** Id du `mission_items` Supabase (clé d'écriture des statuts), null hors ligne. */
+  missionItemId: string | null
   ordre: number
   adresse: string
   lat: number
   lng: number
   type: string
   status: MissionStatus
+  /** Message opérateur du contrat, affiché en ATTENTION (null si aucun). */
+  operatorMessage: string | null
   /** Distance à vol d'oiseau depuis la position courante, en mètres. */
   distanceMeters: number | null
   /** Temps estimé d'arrivée, en minutes. */

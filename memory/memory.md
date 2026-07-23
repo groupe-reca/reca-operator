@@ -117,19 +117,48 @@
     dans `SettingsModal` (section « Assistance vocale » : master + 5 toggles + « Tester la voix »).
   - **Note** : le `MissionEngine` reste **pur** (émet des événements neutres) — c'est la migration
     anticipée depuis le Sprint 004. La détection ne vit plus dans la glue mais dans le moteur.
-- **Source de données = CSV statique** `public/demo/route.csv`, chargé au démarrage. Aucune
-  base permanente pour la tournée à ce stade, aucune communication avec RECA App.
-- **Parseur CSV tolérant** (`services/routeCsv.ts`) : séparateur `;` ou `,` auto-détecté,
-  alias de colonnes (`lat`/`latitude`, `lng`/`longitude`), colonnes optionnelles
-  (`type`, `statut`). **Pourquoi `;`** : les adresses réelles contiennent des virgules
-  (`202 Rue Scott, Saint-Jérôme, QC ...`), donc le délimiteur virgule les casserait.
+- **Source de données = Supabase Mission/MissionItems (RECA App)** — depuis le sprint
+  « Intégration RECA App », le CSV statique est **supprimé** (voir « Essayé/rejeté »). RECA App
+  est le **système maître** ; RECA Operator est un simple terminal terrain qui ne connaît que
+  `Mission` + `MissionItems` (jamais Contrats/Clients/Routes en tant que modules).
+  - **Chaîne de résolution de l'opérateur** : `auth.uid()` == `users.id` == `employees.user_id`
+    → `employees.id` == `missions.operator_id`. ⚠️ `employees.user_id` est **nullable et jamais
+    peuplé par reca-app** → doit être renseigné en **données** pour qu'une mission soit trouvée
+    (ce n'est pas une migration). `missions.operator_id` pointe `employees`, **pas** `users`.
+  - **`mission_items` est une jointure mince** (`mission_id`, `contract_id`, `statut`) : adresse,
+    GPS, client et **`message_operateur`** vivent sur le **contrat** → récupérés par jointure
+    `contracts(adresse_geocodee, latitude, longitude, message_operateur, client:clients(...))`.
+    Il n'y a **pas d'ordre** sur les items (on ne lit jamais `route_contracts`) : `ordre` = index
+    d'arrivée, le tri réel se fait par distance GPS.
+  - **`message_operateur` (contrat) = source des notes ATTENTION** (remplace les fixtures
+    `attentionFixtures.ts`, supprimées). Une seule chaîne → `attention = [message]` ou `[]`.
+  - **Correspondance des statuts** (`services/missionMapping.ts`, **pur, testable**) :
+    lecture `terminee→TERMINE`, `a_reprendre|impossible→NON_TERMINE`, `en_attente|en_cours→EN_ATTENTE` ;
+    écriture `TERMINE→terminee`, `NON_TERMINE→a_reprendre`. **Décision** : pas de colonne
+    `code_probleme` (le problème mappe vers le statut seulement — le code exact n'est pas persisté).
+  - **Reprise** : au chargement, les statuts **terminaux** persistés sont **conservés**
+    (`loadMission`/`play` utilisent `rehydrateStop`, pas `resetStop`) — une résidence déjà faite
+    ne se refait pas ; les non-terminaux repartent `EN_ATTENTE` (repilotés par le GPS).
+  - **Write-back** : point de passage **unique** `services/missionSync.persistItemStatus`
+    (prêt pour une future file hors-ligne). Le moteur reste **pur** : il émet un événement neutre
+    `STOP_FINALIZED {missionItemId, outcome}` depuis `completeActive`/`reportProblem` ; le pont
+    `hooks/useMissionSync.ts` route → écriture Supabase et pilote la bannière « Connexion perdue ».
+  - **Accès réservé aux opérateurs** : garde `RequireOperator` (dans `RequireAuth.tsx`) rend
+    `AccessDenied` si `role !== 'operateur'` (pas de redirection, app mono-écran). Le
+    **`PREVIEW_BYPASS` a été supprimé** (le « système temporaire » d'auth à retirer). Écran
+    « Aucune mission assignée » + bouton Actualiser quand `loadAssignedMission()` renvoie `null`.
+  - **Dépendances côté reca-app** (repo distinct, branche `feat/operator-integration`, 2 migrations) :
+    (1) élargir le CHECK `users.role` à `'operateur'` ; (2) policy RLS `mission_items_update_operator`
+    (l'opérateur assigné peut écrire `statut` de sa mission). **Sans ces migrations appliquées au
+    Supabase partagé**, personne ne passe le garde et le write-back échoue (RLS admin-only).
 
 ## Supabase & auth
 
 - **Même projet Supabase que RECA App** : ref `ynsuxctqsvusbgcudcno`
   (`https://ynsuxctqsvusbgcudcno.supabase.co`). Même table `users`, mêmes rôles.
-- Rôles : `administrateur | operateur | employe`. Le rôle `operateur` n'existe **pas
-  encore** dans la table partagée.
+- Rôles : `administrateur | operateur | employe`. Le rôle `operateur` est **ajouté par une
+  migration reca-app** (branche `feat/operator-integration`) ; tant qu'elle n'est pas appliquée
+  au Supabase partagé + attribuée à un compte, aucun utilisateur ne passe le garde `RequireOperator`.
 - Clés publiques (bundle client) dans `.env.local` (gitignored) :
   `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_MAPBOX_TOKEN`, `VITE_PREVIEW_MISSION`.
   Source : `.input/supabase` (gitignored).
@@ -142,8 +171,10 @@
   (convergence → arrêt sur place [approche + intervention] → éloignement rapide [départ] →
   stop suivant), pilotée par l'état de la mission active. Teste la machine à états complète
   sans matériel GPS.
-- `VITE_PREVIEW_MISSION="1"` (DEV only) : contourne l'auth et ouvre l'écran mission.
-  `"0"` = auth réelle.
+- ~~`VITE_PREVIEW_MISSION`~~ : le bypass d'auth `PREVIEW_BYPASS` a été **supprimé** au sprint
+  « Intégration RECA App » (le prompt exige de retirer le système temporaire). Tester en direct
+  exige désormais un vrai compte **opérateur** (rôle attribué + `employees.user_id` lié + mission
+  assignée). `?sim=1` reste disponible pour piloter le GPS une fois connecté.
 
 ## Infra
 
@@ -157,3 +188,7 @@
   **virgules**, colonnes `Ordre,Adresse,Latitude,Longitude,Type`. **Remplacé** (tache2)
   par la vraie route Saint-Jérôme (`.input/route.csv`, `;`, colonnes `lat`/`lng`). Ne pas
   réintroduire l'ancien format.
+- **Toute la source CSV** (`public/demo/route.csv`, `services/routeCsv.ts` + parseur tolérant,
+  `services/attentionFixtures.ts`) a été **supprimée** au sprint « Intégration RECA App » :
+  la tournée vient désormais de Supabase (Mission/MissionItems). Ne pas réintroduire de CSV —
+  la source de vérité est RECA App.

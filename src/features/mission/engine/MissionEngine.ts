@@ -6,7 +6,6 @@ import type { GpsPosition, Mission, MissionPhase, Stop } from '../domain/types'
 import type { MissionStatus } from '../domain/status'
 import type { MissionLogEntry } from '../domain/log'
 import type { ProblemCode } from '../domain/problemCodes'
-import { attentionNotesFor } from '../services/attentionFixtures'
 
 /**
  * MissionEngine — **service autonome, sans React**, cœur de l'application.
@@ -40,7 +39,7 @@ export type ActiveMissionView = {
   stop: Stop
   /** Prochain état attendu de la machine (null si état final). */
   nextStatus: MissionStatus | null
-  /** Consignes ATTENTION (fictives ce sprint). */
+  /** Consignes ATTENTION (message opérateur du contrat, [] si aucun). */
   attention: string[]
 }
 
@@ -95,6 +94,11 @@ export type MissionEvent =
   | { type: 'ACTIVE_MISSION_CHANGED'; ordre: number; address: string }
   | { type: 'APPROACH_ENTERED'; ordre: number; note: string }
   | { type: 'RESIDENCE_SIDE'; ordre: number; side: 'left' | 'right' }
+  /**
+   * Un stop vient d'atteindre un état terminal — signal **neutre** de persistance
+   * (le moteur ne connaît pas Supabase). Consommé hors moteur par le pont de synchro.
+   */
+  | { type: 'STOP_FINALIZED'; missionItemId: string; outcome: 'TERMINE' | 'NON_TERMINE' }
   | { type: 'MISSION_COMPLETED' }
 
 type EventListener = (event: MissionEvent) => void
@@ -173,7 +177,9 @@ export class MissionEngine {
   // --- Commandes -----------------------------------------------------------
 
   loadMission(mission: Mission): void {
-    this.stops = mission.stops.map(resetStop)
+    // Reprise : on **conserve** les statuts terminaux déjà enregistrés dans Supabase
+    // (une résidence déjà faite ne se refait pas) ; les non-terminaux repartent à neuf.
+    this.stops = mission.stops.map(rehydrateStop)
     this.resetRuntime()
     this.emit()
   }
@@ -181,7 +187,8 @@ export class MissionEngine {
   play(): void {
     const freshStart = this.phase === 'IDLE' || this.phase === 'STOPPED'
     if (freshStart) {
-      this.stops = this.stops.map(resetStop)
+      // Démarrage/reprise : préserve les statuts terminaux persistés (cf. loadMission).
+      this.stops = this.stops.map(rehydrateStop)
       this.clock = 0
       this.timers = null
       this.log = []
@@ -230,6 +237,7 @@ export class MissionEngine {
     active.problemCode = code
     active.completedAt = Date.now()
     this.timers = null
+    this.emitFinalized(active, 'NON_TERMINE')
     this.checkCompletion()
     this.evaluate()
     this.emit()
@@ -280,7 +288,7 @@ export class MissionEngine {
           this.emitEvent({
             type: 'APPROACH_ENTERED',
             ordre: active.ordre,
-            note: attentionNotesFor(active.ordre).join(' '),
+            note: active.operatorMessage ?? '',
           })
         }
         break
@@ -389,7 +397,14 @@ export class MissionEngine {
     active.status = 'TERMINE'
     active.completedAt = Date.now()
     this.timers = null
+    this.emitFinalized(active, 'TERMINE')
     this.checkCompletion()
+  }
+
+  /** Signale la persistance d'un état terminal (neutre : pas de vocabulaire Supabase). */
+  private emitFinalized(stop: Stop, outcome: 'TERMINE' | 'NON_TERMINE'): void {
+    if (!stop.missionItemId) return
+    this.emitEvent({ type: 'STOP_FINALIZED', missionItemId: stop.missionItemId, outcome })
   }
 
   /** Signale une seule fois la fin de mission quand tous les stops sont finaux. */
@@ -475,7 +490,7 @@ export class MissionEngine {
       ? {
           stop: { ...active },
           nextStatus: NEXT_STATUS[active.status] ?? null,
-          attention: attentionNotesFor(active.ordre),
+          attention: active.operatorMessage ? [active.operatorMessage] : [],
         }
       : null
 
@@ -538,6 +553,18 @@ function resetStop(stop: Stop): Stop {
     completedAt: null,
     problemCode: null,
   }
+}
+
+/**
+ * Réhydrate un stop chargé depuis Supabase : conserve un statut **terminal** déjà
+ * enregistré (TERMINE / NON_TERMINE, avec son code problème), et ne réinitialise que
+ * les champs runtime. Tout statut non terminal repart `EN_ATTENTE` (repiloté par le GPS).
+ */
+function rehydrateStop(stop: Stop): Stop {
+  if (FINAL.has(stop.status)) {
+    return { ...stop, distanceMeters: null, etaMinutes: null }
+  }
+  return resetStop(stop)
 }
 
 function newTimers(ordre: number, clock: number): ActiveTimers {
