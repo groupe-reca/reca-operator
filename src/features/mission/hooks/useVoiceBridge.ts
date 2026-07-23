@@ -65,5 +65,7 @@ export function useVoiceBridge({ subscribeEvents, config }: UseVoiceBridgeArgs) 
   return {
     /** Diagnostic dev : prononce le message de bienvenue. */
     testVoice: () => voiceService.speak('Bienvenue dans RECA Operator.'),
+    /** Nom de la voix retenue (affiché dans les réglages pour vérification). */
+    voiceName: voiceService.getVoiceName(),
   }
 }

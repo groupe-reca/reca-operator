@@ -111,6 +111,7 @@ export function MissionPage() {
         config={snapshot.config}
         onChange={engine.setConfig}
         onTestVoice={voice.testVoice}
+        voiceName={voice.voiceName}
         onClose={() => setSettingsOpen(false)}
       />
     </div>

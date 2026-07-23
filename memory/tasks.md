@@ -88,6 +88,17 @@
   headless (tsx) — géométrie G/D, dédup+catégories du manager, et séquence d'événements exacte
   (STARTED×1, CHANGED×2, APPROACH×2, COMPLETED×1) ; grep : aucun TTS dans les composants.
 
+- [x] **Voix — sélection de la meilleure voix + affichage** (`feat/integration-tts-vocale`)
+  `VoiceService.pickVoice()` ne prend plus la première voix fr venue (souvent la voix compacte
+  robotique) : nouvelle fonction `scoreVoice()` qui note les voix françaises et retient la mieux
+  notée — marqueurs `premium/enhanced/neural` (+100), `siri` (+60), noms de qualité connus
+  (amélie/thomas/aurélie/… +30), `fr-CA` (+10, Québec), `localService` (+5) ; fallback voix fr
+  quelconque puis voix par défaut. `pitch=1` fixé sur l'utterance. Nouvelle méthode
+  `getVoiceName()` (nom de la voix retenue) exposée via `useVoiceBridge` → prop `voiceName` de
+  `SettingsModal`, affichée sous la section « Assistance vocale » (« Voix : … ») pour
+  diagnostic. **Aucune logique TTS n'entre dans les composants** (règle maintenue). Vérifié :
+  `tsc -b` OK, `eslint` OK.
+
 ## Abandonnées / en suspens
 
 - [ ] **tache4 — Carte Mapbox interactive** (`.input/tache4.md`, maquette `.input/design-v3.png`)

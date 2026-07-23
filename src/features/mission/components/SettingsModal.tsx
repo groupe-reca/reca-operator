@@ -9,6 +9,7 @@ type SettingsModalProps = {
   config: EngineConfig
   onChange: (patch: Partial<EngineConfig>) => void
   onTestVoice: () => void
+  voiceName: string | null
   onClose: () => void
 }
 
@@ -71,7 +72,7 @@ const displayValue = (config: EngineConfig, field: NumericField) =>
  * via `onChange` (→ `MissionEngine.setConfig`). Aucune persistance : un
  * rechargement rétablit les valeurs par défaut.
  */
-export function SettingsModal({ open, config, onChange, onTestVoice, onClose }: SettingsModalProps) {
+export function SettingsModal({ open, config, onChange, onTestVoice, voiceName, onClose }: SettingsModalProps) {
   // Brouillon local des champs texte : permet une saisie libre (champ vide,
   // frappe intermédiaire) sans reformater à chaque touche.
   const [draft, setDraft] = useState<Record<NumericKey, string>>(() => seedDraft(config))
@@ -194,6 +195,9 @@ export function SettingsModal({ open, config, onChange, onTestVoice, onClose }: 
                   <Volume2 className="size-4 text-accent-strong" aria-hidden="true" />
                   Tester la voix
                 </button>
+                <p className="px-1 text-[11px] text-text-faint">
+                  Voix : {voiceName ?? '(voix par défaut du système)'}
+                </p>
               </div>
             </div>
 

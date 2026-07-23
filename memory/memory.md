@@ -78,8 +78,16 @@
   `MissionEngine → VoiceAnnouncementManager → VoiceService → TTS natif du téléphone`.
   - **`VoiceService`** : abstraction du TTS natif (Web Speech API `speechSynthesis`, moteur
     vocal de l'OS — aucune API externe, aucune IA, aucun coût). Singleton `voiceService`.
-    `initialize/speak/stop/isEnabled/setEnabled/isSupported`, voix `fr-CA`, `speak` = `cancel`
-    puis `speak` (pas de file), no-op si non supporté/désactivé. **Seul point qui touche le TTS.**
+    `initialize/speak/stop/isEnabled/setEnabled/isSupported/getVoiceName`, langue `fr-CA`,
+    `speak` = `cancel` puis `speak` (pas de file), no-op si non supporté/désactivé. **Seul point
+    qui touche le TTS.**
+  - **Sélection de la voix (qualité)** : `pickVoice()` ne prend PAS la première voix fr venue
+    (souvent la voix compacte robotique) mais celle au **score** le plus élevé — marqueurs
+    `premium`/`enhanced`/`neural` (+100), `siri` (+60), noms de qualité connus
+    (amélie/thomas/aurélie/… +30), `fr-CA` (+10, Québec), `localService` (+5). L'opérateur doit
+    **installer** une voix « Premium/Enhanced » sur l'appareil (iOS/macOS) ; elle est alors
+    détectée automatiquement. Nom retenu affiché dans `SettingsModal` (« Voix : … ») via
+    `useVoiceBridge` → `getVoiceName()`.
   - **`VoiceAnnouncementManager`** : décideur, singleton `voiceAnnouncements`. Point de passage
     **obligatoire** des annonces (`say()` privé = futur emplacement de la logique anti-répétition).
     Méthodes : `announceMissionStarted/announceNextAddress/announceCriticalAlert/announceMissionCompleted`.

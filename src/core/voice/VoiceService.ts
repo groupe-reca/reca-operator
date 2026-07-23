@@ -11,6 +11,28 @@
 
 const VOICE_LANG = 'fr-CA'
 
+/**
+ * Marqueurs de voix haute qualité (dans le nom, en minuscules). iOS/macOS
+ * exposent des voix « Premium » / « Enhanced » (ex. Amélie, Thomas, Aurélie) et
+ * les voix Siri, bien plus naturelles que la voix compacte par défaut. Il faut
+ * les préférer explicitement — sinon `getVoices()` renvoie souvent la compacte.
+ */
+const PREMIUM_MARKERS = ['premium', 'enhanced', 'neural']
+const SIRI_MARKER = 'siri'
+const QUALITY_NAMES = ['amélie', 'amelie', 'thomas', 'aurélie', 'aurelie', 'audrey', 'marie', 'nicolas']
+
+/** Score une voix française : plus c'est haut, plus la voix est « belle ». */
+function scoreVoice(voice: SpeechSynthesisVoice): number {
+  const name = voice.name.toLowerCase()
+  let score = 0
+  if (PREMIUM_MARKERS.some((m) => name.includes(m))) score += 100
+  if (name.includes(SIRI_MARKER)) score += 60
+  if (QUALITY_NAMES.some((n) => name.includes(n))) score += 30
+  if (voice.lang.toLowerCase() === VOICE_LANG.toLowerCase()) score += 10 // Québec
+  if (voice.localService) score += 5
+  return score
+}
+
 export class VoiceService {
   private readonly supported =
     typeof window !== 'undefined' && 'speechSynthesis' in window
@@ -40,6 +62,7 @@ export class VoiceService {
     const utterance = new SpeechSynthesisUtterance(text)
     utterance.lang = VOICE_LANG
     utterance.rate = 1
+    utterance.pitch = 1
     if (this.preferredVoice) utterance.voice = this.preferredVoice
     window.speechSynthesis.speak(utterance)
   }
@@ -65,13 +88,29 @@ export class VoiceService {
     return this.supported
   }
 
+  /** Nom de la voix retenue (pour affichage / diagnostic), ou null. */
+  getVoiceName(): string | null {
+    return this.preferredVoice?.name ?? null
+  }
+
+  /**
+   * Choisit la **meilleure** voix française disponible : on ne prend pas la
+   * première venue (souvent la voix compacte, robotique) mais celle au score le
+   * plus élevé (premium/enhanced/Siri, noms de qualité connus, fr-CA en
+   * départage). Fallback : une voix fr quelconque, sinon la voix par défaut.
+   */
   private pickVoice(): void {
     if (!this.supported) return
-    const voices = window.speechSynthesis.getVoices()
-    this.preferredVoice =
-      voices.find((v) => v.lang === VOICE_LANG) ??
-      voices.find((v) => v.lang.startsWith('fr')) ??
-      null
+    const french = window.speechSynthesis
+      .getVoices()
+      .filter((v) => v.lang.toLowerCase().startsWith('fr'))
+    if (french.length === 0) {
+      this.preferredVoice = null
+      return
+    }
+    this.preferredVoice = french.reduce((best, v) =>
+      scoreVoice(v) > scoreVoice(best) ? v : best,
+    )
   }
 }
 
