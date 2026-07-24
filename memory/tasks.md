@@ -120,6 +120,10 @@
   `npm run build` OK, tests headless (tsx) — mappers + reprise (TERMINE conservé, en_attente
   redevient actif via GPS). **Dépend de** la PR reca-app `feat/operator-integration` (rôle
   operateur + RLS écriture opérateur) appliquée au Supabase partagé + `employees.user_id` peuplé.
+  **Validé en direct (2026-07-24)** contre le vrai Supabase avec le compte `operateur@groupereca.ca` :
+  connexion → rôle operateur → employé lié → mission #1 → 3 MissionItems (adresse/GPS/message_operateur
+  joints du contrat) → write-back RLS autorisé. Migrations 1 & 2 appliquées via SQL Editor ;
+  compte + mission de test seedés (voir memory.md « Supabase & auth »).
 
 ## Abandonnées / en suspens
 

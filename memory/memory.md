@@ -164,6 +164,16 @@
   Source : `.input/supabase` (gitignored).
 - Se connecter exige : compte dans Supabase Auth **+** ligne `users` avec `actif=true`
   (sinon `auth.service.mapUser` rejette).
+- **État du Supabase partagé (au 2026-07-24)** : les 2 migrations d'intégration (rôle `operateur`
+  + policy `mission_items_update_operator`) sont **appliquées** (via SQL Editor). Compte de test
+  **`operateur@groupereca.ca`** = rôle operateur, `employees.user_id` lié, une **mission #1**
+  (planifiee) avec 3 MissionItems à Saint-Jérôme (dont 2 avec `message_operateur`). Ne pas
+  supprimer ces données de test.
+- ⚠️ **Dérive de schéma reca-app sur ce projet** : la table **`public.routes` n'existe pas**
+  (probablement `routes_v2` non appliquée / routes v1 droppée en cascade), alors que `missions`
+  et `route_contracts` y référaient. Sans conséquence pour reca-operator (il n'utilise jamais
+  `routes`) ; le seed de mission de test met un `route_id` synthétique (`gen_random_uuid()`, plus
+  de FK). À corriger côté **reca-app** (appliquer `routes_v2`) quand pertinent.
 
 ## Bypass de développement
 
