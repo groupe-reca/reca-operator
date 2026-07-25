@@ -191,3 +191,16 @@
   déjà appliqués en direct le 2026-07-24 (voir plus haut, section Supabase & auth) et restent
   fonctionnels en attendant que cette migration soit rejouée côté `reca-app` pour que l'historique
   de migrations reflète enfin la réalité. `tsc -b`/`npm run lint`/`npm run build` propres.
+  **Poussé sur `origin/main` par l'utilisateur** (commit `142e4ee`).
+
+- [x] **Journalisation du démarrage dans l'historique de Mission (2026-07-25, suite)** —
+  `startMission` (`services/missionSync.ts`) insère désormais aussi une ligne `mission_events`
+  (`type: 'mission_debutee'`, même type que RECA App utilise déjà pour "Débuter" côté admin) quand
+  l'update `missions` a réellement touché une ligne (`.select('id')` après l'update — distingue un
+  vrai premier démarrage d'un rejeu de `MISSION_STARTED` sur reconnexion, où la Mission est déjà
+  `en_cours` et l'update ne touche rien). Best-effort dans un `try/catch` séparé : un échec de
+  journalisation ne fait jamais échouer le démarrage réel. `created_by` posé automatiquement par
+  le trigger d'audit (`auth.uid()`) → l'historique affiche le vrai opérateur comme auteur, RLS déjà
+  ouverte à tout authentifié (`mission_events_insert_authenticated`, `created_by = auth.uid()`),
+  aucune migration `reca-app` supplémentaire nécessaire. `tsc -b`/`npm run lint`/`npm run build`
+  propres.

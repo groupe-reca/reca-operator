@@ -53,7 +53,8 @@
   - `services/missionSync.ts` — `persistItemStatus(id, statut)` : **point d'écriture unique**
     vers `mission_items` (prêt hors-ligne, ne lève jamais). 2026-07-25 — gagne `startMission(missionId)` :
     `missions.update({statut:'en_cours', heure_debut}).eq('statut','planifiee')`, idempotent, même
-    convention best-effort.
+    convention best-effort ; journalise aussi une ligne `mission_events` (`mission_debutee`) quand
+    l'update a réellement touché une ligne (pas sur un rejeu de reconnexion).
   - (**Supprimés** au sprint Intégration RECA App : `services/routeCsv.ts`,
     `services/attentionFixtures.ts`.)
 - **hooks** :

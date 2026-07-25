@@ -34,17 +34,36 @@ export async function persistItemStatus(
  * start, jamais une reprise après pause). Le filtre `.eq('statut', 'planifiee')`
  * rend l'appel idempotent : à chaque rechargement de l'app (reconnexion), le
  * moteur rejoue `MISSION_STARTED` mais la Mission est déjà `en_cours` en base,
- * donc l'update ne touche aucune ligne — `heure_debut` n'est jamais écrasée.
+ * donc l'update ne touche aucune ligne — `heure_debut` n'est jamais écrasée, et
+ * aucune 2e ligne d'historique n'est journalisée (voir `.select('id')` ci-dessous,
+ * qui distingue "a réellement démarré" de "déjà démarré").
  * Best-effort comme `persistItemStatus` : ne lève jamais.
  */
 export async function startMission(missionId: string): Promise<boolean> {
   try {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('missions')
       .update({ statut: 'en_cours', heure_debut: new Date().toISOString() } as never)
       .eq('id', missionId)
       .eq('statut', 'planifiee')
-    return !error
+      .select('id')
+    if (error) return false
+
+    // Ligne réellement mise à jour (donc premier vrai démarrage, pas un rejeu
+    // de MISSION_STARTED sur reconnexion) : journalise dans l'historique de la
+    // Mission — même table/type que RECA App (`mission_events`, type
+    // `mission_debutee`), pour que l'admin voie "Début" avec l'opérateur comme
+    // auteur réel (`created_by` posé par le trigger d'audit). Best-effort : un
+    // échec de journalisation ne doit jamais faire échouer le démarrage réel.
+    if (data && data.length > 0) {
+      try {
+        await supabase.from('mission_events').insert({ mission_id: missionId, type: 'mission_debutee' } as never)
+      } catch {
+        // ignoré : l'historique n'est pas critique pour le déroulement de la tournée.
+      }
+    }
+
+    return true
   } catch {
     return false
   }

@@ -211,6 +211,14 @@
   vrai fresh start, jamais une reprise après pause) était déjà le bon point d'accroche.
   `startMission` est idempotent par construction (`.eq('statut', 'planifiee')`) : rejouée à chaque
   reconnexion/rechargement sans jamais écraser `heure_debut` une fois la Mission déjà `en_cours`.
+- **Historique de Mission** : `startMission` insère aussi une ligne `mission_events` (`type:
+  'mission_debutee'`, même type déjà utilisé par RECA App pour "Débuter" côté admin — un seul
+  vocabulaire d'événements, l'onglet Historique de la fiche Mission côté `reca-app` affiche donc
+  cette ligne comme n'importe quelle autre) — seulement quand l'update de `missions` a réellement
+  touché une ligne (`.select('id')` après l'update), jamais sur un rejeu de reconnexion. Best-effort
+  dans un `try/catch` dédié : un échec de journalisation ne bloque jamais le démarrage réel de la
+  tournée. `created_by` posé par le trigger d'audit (`auth.uid()`) → l'auteur affiché est le vrai
+  opérateur, pas un "Système" fictif.
 - **Dérive de schéma découverte et réconciliée côté `reca-app`** : le rôle `users.role = 'operateur'`
   et la policy `mission_items_update_operator` documentés ci-dessus (section "État du Supabase
   partagé au 2026-07-24") avaient été appliqués **à la main** via l'éditeur SQL, sur une branche
