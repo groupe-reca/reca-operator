@@ -50,10 +50,16 @@
   un tick 1 s, et charge le CSV. Les composants sont purement présentationnels. **Ne jamais
   remettre de logique dans l'UI ou le hook.**
   - **Machine à états** (par stop) : un seul stop « engagé » à la fois = la Mission actuelle.
-    `EN_ATTENTE → EN_ROUTE` (plus proche non final) `→ EN_APPROCHE` (dans le rayon)
-    `→ EN_COURS` (rebours écoulé) `→ DEPART` (sorti du rayon + vitesse) `→ TERMINE` (rebours
-    écoulé). `TERMINE` **retiré de la liste** ; `NON_TERMINE` (Problème) **reste dans la liste**
-    jusqu'à clôture de la route. Tri **toujours par distance réelle** (plus de bascule ordre).
+    `EN_ATTENTE → EN_ROUTE` (**prochain non final dans l'ordre de la mission**) `→ EN_APPROCHE`
+    (dans le rayon) `→ EN_COURS` (rebours écoulé) `→ DEPART` (sorti du rayon + vitesse)
+    `→ TERMINE` (rebours écoulé). `TERMINE` **retiré de la liste** ; `NON_TERMINE` (Problème)
+    **reste dans la liste** jusqu'à clôture de la route.
+  - **Ordonnancement = ordre de la mission, PAS la distance GPS** (décision client, révisée
+    2026-07-25) : la sélection du stop actif (`nextSelectableInOrder`) et le tri de la liste
+    (`otherStops`) suivent `ordre` (rang `created_at` des `mission_items`). Les distances GPS ne
+    servent **que** la machine à états (détection d'arrivée/départ), jamais l'ordonnancement.
+    ⚠️ **Ancien comportement rejeté** : tri par proximité (« plus proche non final ») — ne pas
+    réintroduire.
   - **Horloge virtuelle** : le temps n'avance que pendant `RUNNING` → la pause fige
     naturellement chronos et comptes à rebours. Journal (`domain/log.ts`) = durées réelles
     déplacement + intervention, **en mémoire seule** (pas de persistance ce sprint).
@@ -128,8 +134,9 @@
   - **`mission_items` est une jointure mince** (`mission_id`, `contract_id`, `statut`) : adresse,
     GPS, client et **`message_operateur`** vivent sur le **contrat** → récupérés par jointure
     `contracts(adresse_geocodee, latitude, longitude, message_operateur, client:clients(...))`.
-    Il n'y a **pas d'ordre** sur les items (on ne lit jamais `route_contracts`) : `ordre` = index
-    d'arrivée, le tri réel se fait par distance GPS.
+    `ordre` = rang des items triés par `created_at` (on ne lit jamais `route_contracts`) : il
+    **définit la séquence de la tournée**, qui pilote la sélection du stop actif et l'ordre de la
+    liste (révision 2026-07-25, cf. « Ordonnancement » plus haut).
   - **`message_operateur` (contrat) = source des notes ATTENTION** (remplace les fixtures
     `attentionFixtures.ts`, supprimées). Une seule chaîne → `attention = [message]` ou `[]`.
   - **Correspondance des statuts** (`services/missionMapping.ts`, **pur, testable**) :

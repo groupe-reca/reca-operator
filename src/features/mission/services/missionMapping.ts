@@ -50,8 +50,9 @@ export function mapItemToStop(row: MissionItemJoinRow, index: number): Stop {
   const contract = row.contract
   return {
     missionItemId: row.id,
-    // Les items n'ont pas d'ordre (on ne lit jamais route_contracts) : le tri se
-    // fait par distance GPS. L'ordre sert seulement d'identifiant/étiquette stable.
+    // `ordre` = rang dans la mission (les items arrivent triés par `created_at`).
+    // Il pilote la sélection du stop actif et l'ordre de la liste (la tournée suit
+    // la séquence de la mission, pas la distance GPS).
     ordre: index + 1,
     adresse: contract?.adresse_geocodee ?? '',
     lat: Number(contract?.latitude),

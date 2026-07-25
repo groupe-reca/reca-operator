@@ -11,8 +11,10 @@ import type { ProblemCode } from '../domain/problemCodes'
  * MissionEngine — **service autonome, sans React**, cœur de l'application.
  *
  * Responsable de TOUTE la logique : réception de la position GPS, calcul des
- * distances, tri par proximité, machine à états automatique, compteurs /
- * chronomètres et journal des temps. L'interface ne fait que pousser les entrées
+ * distances, sélection/tri des stops **selon l'ordre de la mission**, machine à
+ * états automatique, compteurs / chronomètres et journal des temps. Les distances
+ * GPS servent la machine à états (détection d'arrivée), pas l'ordonnancement.
+ * L'interface ne fait que pousser les entrées
  * (`updatePosition`, `tick`, commandes) et lire `getSnapshot()`. Aucune logique
  * métier « déneigement » ici : tout reste générique pour la plateforme Signa.
  *
@@ -349,8 +351,9 @@ export class MissionEngine {
 
   /**
    * Choisit / met à jour la mission active. Tant qu'aucun stop n'est engagé
-   * au-delà de EN_ROUTE, la plus proche (non finale) devient la cible — l'app
-   * s'adapte au parcours réel de l'opérateur.
+   * au-delà de EN_ROUTE, le **prochain stop dans l'ordre de la mission** (non
+   * final) devient la cible — l'app suit la séquence de la tournée, pas la
+   * proximité GPS.
    */
   private selectActiveStop(): void {
     const engaged = this.stops.find(
@@ -361,24 +364,24 @@ export class MissionEngine {
       return
     }
 
-    const nearest = this.nearestSelectable()
+    const next = this.nextSelectableInOrder()
     const current = this.stops.find((s) => s.status === 'EN_ROUTE')
 
-    if (!nearest) {
+    if (!next) {
       if (current) current.status = 'EN_ATTENTE'
       this.timers = null
       return
     }
 
-    if (current && current.ordre === nearest.ordre) return
+    if (current && current.ordre === next.ordre) return
 
     if (current) current.status = 'EN_ATTENTE'
-    nearest.status = 'EN_ROUTE'
-    this.timers = newTimers(nearest.ordre, this.clock)
+    next.status = 'EN_ROUTE'
+    this.timers = newTimers(next.ordre, this.clock)
     this.emitEvent({
       type: 'ACTIVE_MISSION_CHANGED',
-      ordre: nearest.ordre,
-      address: splitAddress(nearest.adresse).street,
+      ordre: next.ordre,
+      address: splitAddress(next.adresse).street,
     })
   }
 
@@ -423,13 +426,12 @@ export class MissionEngine {
     return this.stops.find((s) => s.ordre === this.timers!.ordre) ?? null
   }
 
-  private nearestSelectable(): Stop | null {
+  /** Prochain stop non final dans l'ordre de la mission (plus petit `ordre`). */
+  private nextSelectableInOrder(): Stop | null {
     let best: Stop | null = null
     for (const s of this.stops) {
       if (FINAL.has(s.status)) continue
-      const d = s.distanceMeters ?? Number.POSITIVE_INFINITY
-      const bestD = best?.distanceMeters ?? Number.POSITIVE_INFINITY
-      if (best === null || d < bestD) best = s
+      if (best === null || s.ordre < best.ordre) best = s
     }
     return best
   }
@@ -479,12 +481,8 @@ export class MissionEngine {
     const otherStops = this.stops
       .filter((s) => s.status !== 'TERMINE' && s.ordre !== active?.ordre)
       .map((s) => ({ ...s }))
-      .sort((a, b) => {
-        const da = a.distanceMeters ?? Number.POSITIVE_INFINITY
-        const db = b.distanceMeters ?? Number.POSITIVE_INFINITY
-        if (da !== db) return da - db
-        return a.ordre - b.ordre
-      })
+      // Suit l'ordre de la mission (séquence de la tournée), pas la distance GPS.
+      .sort((a, b) => a.ordre - b.ordre)
 
     const activeMission: ActiveMissionView | null = active
       ? {

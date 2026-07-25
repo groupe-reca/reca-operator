@@ -125,6 +125,16 @@
   joints du contrat) → write-back RLS autorisé. Migrations 1 & 2 appliquées via SQL Editor ;
   compte + mission de test seedés (voir memory.md « Supabase & auth »).
 
+- [x] **Ordonnancement par ordre de mission (fin du tri par distance)** (2026-07-25)
+  À la demande du client : la liste et la sélection du stop actif ne suivent **plus la distance
+  GPS** mais l'**ordre de la mission** (`ordre` = rang `created_at` des `mission_items`). Fait dans
+  `engine/MissionEngine.ts` : (1) `nearestSelectable()` → `nextSelectableInOrder()` (prochain non
+  final au plus petit `ordre`) ; (2) tri de `otherStops` (`buildSnapshot`) par `ordre` au lieu de
+  la distance ; (3) docblocks + commentaire `mapItemToStop` mis à jour. Les distances GPS restent
+  utilisées **uniquement** par la machine à états (détection arrivée/départ). Vérifié : `tsc -b` OK,
+  `eslint` OK. Mémoire corrigée (les 2 anciennes mentions « tri toujours par distance » sont
+  révisées).
+
 ## Abandonnées / en suspens
 
 - [ ] **tache4 — Carte Mapbox interactive** (`.input/tache4.md`, maquette `.input/design-v3.png`)
