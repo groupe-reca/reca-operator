@@ -170,3 +170,24 @@
   que via `SettingsModal`, ouverte par la `DevControlBar` (dev only). Prévoir un accès aux
   réglages hors mode dev. Envisager aussi un plugin TTS natif (Capacitor) derrière
   `VoiceService` si l'app est empaquetée.
+
+- [x] **Démarrage réel de la Mission côté RECA App (2026-07-25)** — jusqu'ici, `reca-operator`
+  ne modifiait jamais la table `missions` (seulement `mission_items.statut`) : le bouton Play ne
+  démarrait que le moteur GPS local. Câblage ajouté (depuis une session sur le repo `reca-app`,
+  qui a d'abord découvert ce repo puis y a apporté les changements) : `domain/types.ts` (`Mission.id`),
+  `services/missionSupabase.ts` (renvoie `id`), `services/missionSync.ts` (nouvelle `startMission`,
+  best-effort, filtre `.eq('statut','planifiee')` pour l'idempotence), `hooks/useMissionEngine.ts`
+  (expose `missionId`), `hooks/useMissionSync.ts` (appelle `startMission` sur l'événement
+  `MISSION_STARTED` du moteur), `pages/MissionPage.tsx` (câblage). Aucun nouveau bouton — la prod
+  démarre déjà le moteur automatiquement, l'événement `MISSION_STARTED` (fresh start uniquement,
+  jamais une reprise après pause) est le point d'accroche naturel. Détail complet : `memory/plans.md`.
+  **Dépendance RLS déjà satisfaite** : `startMission` écrit dans `missions`, autorisé par la policy
+  `reca-app` `missions_update_admin_or_operator` (2026-07-25, déjà appliquée en live) — cette policy
+  ne teste que le lien `employees.user_id = auth.uid()` + `operator_id`, **pas** la valeur de
+  `users.role`, donc elle fonctionne indépendamment du rôle `'operateur'`. La nouvelle migration
+  `reca-app` `20260725020000_reconcile_operator_role_and_policies.sql` (élargit `users.role` à
+  `'operateur'`, retire l'ancienne policy ad hoc `mission_items_update_operator` en doublon) est
+  une réconciliation de schéma/documentation — le rôle `'operateur'` et la policy ad hoc étaient
+  déjà appliqués en direct le 2026-07-24 (voir plus haut, section Supabase & auth) et restent
+  fonctionnels en attendant que cette migration soit rejouée côté `reca-app` pour que l'historique
+  de migrations reflète enfin la réalité. `tsc -b`/`npm run lint`/`npm run build` propres.

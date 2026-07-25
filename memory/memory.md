@@ -199,6 +199,32 @@
 - `ecosystem.config.cjs` : PM2 sert `dist/` en SPA sur 3050 (prod).
 - **Aucun test runner** configuré (ni script `test`, ni Vitest/Jest).
 
+## Suivi (2026-07-25) — démarrage réel de la Mission + réconciliation reca-app
+
+- **`missions.statut`/`heure_debut` sont désormais mis à jour par `reca-operator` lui-même** au
+  premier démarrage réel de la tournée (`services/missionSync.ts` → `startMission`, appelée depuis
+  `hooks/useMissionSync.ts` sur l'événement `MISSION_STARTED` du moteur). Avant cette tâche, seul
+  `mission_items.statut` était écrit — la Mission elle-même ne passait jamais à `en_cours` depuis
+  ce repo (seul un compte admin `reca-app` pouvait le faire manuellement).
+- **Aucun nouveau bouton "Démarrer"** : la prod démarre déjà le moteur automatiquement dès que la
+  Mission assignée est chargée (`useMissionEngine.ts`) — `MISSION_STARTED` (émis seulement sur un
+  vrai fresh start, jamais une reprise après pause) était déjà le bon point d'accroche.
+  `startMission` est idempotent par construction (`.eq('statut', 'planifiee')`) : rejouée à chaque
+  reconnexion/rechargement sans jamais écraser `heure_debut` une fois la Mission déjà `en_cours`.
+- **Dérive de schéma découverte et réconciliée côté `reca-app`** : le rôle `users.role = 'operateur'`
+  et la policy `mission_items_update_operator` documentés ci-dessus (section "État du Supabase
+  partagé au 2026-07-24") avaient été appliqués **à la main** via l'éditeur SQL, sur une branche
+  `feat/operator-integration` qui n'existe dans **aucun** historique git de `reca-app` — dérive de
+  schéma jamais committée. Réconciliée par une migration dédiée côté `reca-app`
+  (`20260725020000_reconcile_operator_role_and_policies.sql`) qui rend ces 2 changements idempotents
+  et retire la policy ad hoc (doublon avec `missions_update_admin_or_operator`/
+  `mission_items_update_admin_or_operator`, ajoutées côté `reca-app` le même jour pour permettre à
+  l'opérateur assigné d'écrire sur `missions`/`mission_items` sans policy dédiée à `reca-operator`).
+  **Piège à retenir** : une note "appliqué via l'éditeur SQL" dans ce `memory/` n'est une garantie
+  de rien côté `reca-app` tant qu'aucune migration correspondante n'y est committée — toujours
+  vérifier par un `git log`/`grep` dans le repo `reca-app` avant de supposer qu'un changement partagé
+  est documenté des deux côtés.
+
 ## Essayé / rejeté
 
 - Le CSV de démo initial (Sprint 001) était factice : 20 « Rue Talon », séparé par

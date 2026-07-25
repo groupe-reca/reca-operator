@@ -67,6 +67,7 @@ export async function loadAssignedMission(): Promise<Mission | null> {
     .filter((stop) => Number.isFinite(stop.lat) && Number.isFinite(stop.lng))
 
   return {
+    id: mission.id,
     nom: `Mission #${mission.numero}`,
     secteur: '',
     stops,

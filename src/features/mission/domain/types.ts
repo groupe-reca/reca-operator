@@ -48,6 +48,8 @@ export type MissionPhase = 'IDLE' | 'RUNNING' | 'PAUSED' | 'STOPPED'
 
 /** Une mission (tournée) chargée depuis une source de données. */
 export type Mission = {
+  /** Id `missions` Supabase (clé d'écriture du démarrage), null hors ligne. */
+  id: string | null
   nom: string
   secteur: string
   stops: Stop[]

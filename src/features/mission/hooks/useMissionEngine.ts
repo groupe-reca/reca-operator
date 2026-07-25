@@ -88,6 +88,7 @@ export function useMissionEngine() {
     error: missionQuery.error,
     // Query réussie mais sans mission assignée → écran dédié « Aucune mission ».
     noMission: missionQuery.isSuccess && missionQuery.data === null,
+    missionId: mission?.id ?? null,
     isFetchingMission: missionQuery.isFetching,
     refetchMission: () => {
       void missionQuery.refetch()

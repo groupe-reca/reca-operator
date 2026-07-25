@@ -27,3 +27,25 @@ export async function persistItemStatus(
     return false
   }
 }
+
+/**
+ * Démarre officiellement la Mission côté RECA App : statut `en_cours` +
+ * `heure_debut`. Appelé sur le tout premier `MISSION_STARTED` du moteur (fresh
+ * start, jamais une reprise après pause). Le filtre `.eq('statut', 'planifiee')`
+ * rend l'appel idempotent : à chaque rechargement de l'app (reconnexion), le
+ * moteur rejoue `MISSION_STARTED` mais la Mission est déjà `en_cours` en base,
+ * donc l'update ne touche aucune ligne — `heure_debut` n'est jamais écrasée.
+ * Best-effort comme `persistItemStatus` : ne lève jamais.
+ */
+export async function startMission(missionId: string): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('missions')
+      .update({ statut: 'en_cours', heure_debut: new Date().toISOString() } as never)
+      .eq('id', missionId)
+      .eq('statut', 'planifiee')
+    return !error
+  } catch {
+    return false
+  }
+}

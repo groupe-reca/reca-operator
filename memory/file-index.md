@@ -31,7 +31,8 @@
     `completeActive`/`reportProblem`. Exporte `MissionSnapshot`, `ActiveMissionView`, `CounterView`.
 - **domain** (logique pure, générique Signa) :
   - `domain/types.ts` — `LatLng`, `GpsPosition` (avec `speed`/`heading`), `Stop` (avec
-    `problemCode`, **`missionItemId`**, **`operatorMessage`**), `Mission`, `MissionPhase`
+    `problemCode`, **`missionItemId`**, **`operatorMessage`**), `Mission` (2026-07-25 — gagne
+    `id: string | null`, clé d'écriture de `startMission`), `MissionPhase`
   - `domain/status.ts` — union `MissionStatus` (9 statuts), `STATUS_CONFIG`, `restingIconFor`
   - `domain/config.ts` — constantes de **défaut** : `ARRIVAL_RADIUS_METERS`, `LOW_SPEED_KMH`,
     `DEPART_SPEED_KMH`, `APPROACH_DELAY_MS`, `DEPART_DELAY_MS`, `DEV_CONTROLS` ; + type
@@ -48,9 +49,11 @@
     `MissionItemJoinRow`.
   - `services/missionSupabase.ts` — `loadAssignedMission()` : résout l'opérateur
     (`auth.uid → employees.user_id → missions.operator_id`), charge Mission + `mission_items`
-    joints aux contrats. `null` = aucune mission assignée.
+    joints aux contrats. `null` = aucune mission assignée. 2026-07-25 — renvoie aussi `id`.
   - `services/missionSync.ts` — `persistItemStatus(id, statut)` : **point d'écriture unique**
-    vers `mission_items` (prêt hors-ligne, ne lève jamais).
+    vers `mission_items` (prêt hors-ligne, ne lève jamais). 2026-07-25 — gagne `startMission(missionId)` :
+    `missions.update({statut:'en_cours', heure_debut}).eq('statut','planifiee')`, idempotent, même
+    convention best-effort.
   - (**Supprimés** au sprint Intégration RECA App : `services/routeCsv.ts`,
     `services/attentionFixtures.ts`.)
 - **hooks** :
@@ -58,9 +61,11 @@
   - `hooks/useMissionEngine.ts` — **adaptateur mince** : instancie l'engine, `useSyncExternalStore`,
     pousse GPS + tick 1 s, charge la **Mission Supabase** (`loadAssignedMission`), simulateur
     `?sim=1` (cycle complet). Réexpose snapshot + commandes + `devControls` + `config`/`setConfig`
-    + **`noMission`/`isFetchingMission`/`refetchMission`**.
+    + **`noMission`/`isFetchingMission`/`refetchMission`** + **`missionId`** (2026-07-25).
   - `hooks/useMissionSync.ts` — pont write-back (glue) : abonné à `engine.onEvent`, route
     `STOP_FINALIZED` → `persistItemStatus` ; expose `connectionLost` (bannière « Connexion perdue »).
+    2026-07-25 — accepte aussi `missionId`, route `MISSION_STARTED` → `startMission` (démarrage
+    réel de la Mission, fresh start uniquement, idempotent).
 - **components** (présentationnels) : `components/SmartCounter.tsx`,
   `components/CurrentMissionCard.tsx`, `components/StopListHeader.tsx`,
   `components/StopList.tsx`, `components/StopRow.tsx`, `components/ProblemModal.tsx`

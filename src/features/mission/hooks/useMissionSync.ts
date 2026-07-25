@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { MissionEvent } from '../engine/MissionEngine'
 import { outcomeToStatut } from '../services/missionMapping'
-import { persistItemStatus } from '../services/missionSync'
+import { persistItemStatus, startMission } from '../services/missionSync'
 
 /**
  * Pont React (glue) entre le `MissionEngine` et la synchronisation Supabase. Vit
@@ -15,19 +15,25 @@ import { persistItemStatus } from '../services/missionSync'
  */
 type UseMissionSyncArgs = {
   subscribeEvents: (listener: (event: MissionEvent) => void) => () => void
+  /** Id `missions` de la mission chargée, null tant qu'elle n'est pas connue. */
+  missionId: string | null
 }
 
-export function useMissionSync({ subscribeEvents }: UseMissionSyncArgs) {
+export function useMissionSync({ subscribeEvents, missionId }: UseMissionSyncArgs) {
   const [connectionLost, setConnectionLost] = useState(false)
 
   useEffect(() => {
     return subscribeEvents((event) => {
+      if (event.type === 'MISSION_STARTED') {
+        if (missionId) void startMission(missionId)
+        return
+      }
       if (event.type !== 'STOP_FINALIZED') return
       void persistItemStatus(event.missionItemId, outcomeToStatut(event.outcome)).then((ok) =>
         setConnectionLost(!ok),
       )
     })
-  }, [subscribeEvents])
+  }, [subscribeEvents, missionId])
 
   return { connectionLost }
 }

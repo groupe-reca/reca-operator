@@ -28,8 +28,8 @@ export function MissionPage() {
     config: snapshot.config,
   })
 
-  // Synchro Supabase (glue) : persiste chaque changement de statut terminal.
-  const sync = useMissionSync({ subscribeEvents: engine.subscribeEvents })
+  // Synchro Supabase (glue) : persiste chaque changement de statut terminal + démarre la Mission.
+  const sync = useMissionSync({ subscribeEvents: engine.subscribeEvents, missionId: engine.missionId })
 
   const handleSelectProblem = (code: ProblemCode) => {
     engine.reportProblem(code)

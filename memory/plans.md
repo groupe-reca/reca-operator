@@ -146,6 +146,49 @@
 - **Résultat** : `tsc -b` OK, `eslint` OK, `npm run build` OK, headless (tsx) — mappers + reprise.
   Dépend de la PR reca-app appliquée au Supabase partagé + `employees.user_id` peuplé.
 
+### Démarrage réel de la Mission côté RECA App ✅
+
+- **Objectif** : `reca-operator` n'écrivait jamais dans `missions` (seulement `mission_items.statut`) —
+  le bouton Play ne fait démarrer que le moteur GPS local. Une session sur le repo `reca-app` a
+  découvert ce repo et demandé si ce dernier avait besoin d'un câblage pour que "l'opérateur appuie
+  sur démarrer → Mission `en_cours` + `heure_debut`" se reflète réellement en base.
+- **Constat avant implémentation** : en production, l'engine démarre déjà **automatiquement** dès
+  que la Mission assignée est chargée (`useMissionEngine.ts` : `if (!engine.getConfig().devControls)
+  engine.play()`) — il n'existe **aucun bouton "Démarrer" manuel en prod** (Play/Pause/Stop ne
+  vivent que dans `DevControlBar`, dev only). Le point d'accroche naturel est donc l'événement
+  `MISSION_STARTED` déjà émis par `MissionEngine.play()`, mais **seulement sur un fresh start**
+  (`phase IDLE|STOPPED → RUNNING`, jamais une reprise après pause) — exactement la sémantique
+  voulue.
+- **Étapes** :
+  1. `domain/types.ts` — `Mission` gagne `id: string | null`.
+  2. `services/missionSupabase.ts` — `loadAssignedMission()` renvoie `id: mission.id` (déjà
+     sélectionné en base, juste pas encore transmis au domaine).
+  3. `services/missionSync.ts` — nouvelle `startMission(missionId)` : `missions.update({statut:
+     'en_cours', heure_debut: now()}).eq('id', missionId).eq('statut', 'planifiee')`. Le filtre
+     `.eq('statut', 'planifiee')` est ce qui rend l'appel **idempotent** : à chaque rechargement
+     d'app (reconnexion), le moteur est une nouvelle instance donc `MISSION_STARTED` refire, mais
+     la Mission est déjà `en_cours` en base → l'update ne touche 0 ligne, `heure_debut` n'est jamais
+     écrasée. Best-effort (`try/catch`, ne lève jamais), même convention que `persistItemStatus`.
+  4. `hooks/useMissionEngine.ts` — expose `missionId: mission?.id ?? null` dans le retour du hook.
+  5. `hooks/useMissionSync.ts` — accepte un nouveau paramètre `missionId`, branche un cas
+     `event.type === 'MISSION_STARTED'` qui appelle `startMission(missionId)` (si connu) avant le
+     traitement existant de `STOP_FINALIZED`.
+  6. `pages/MissionPage.tsx` — passe `missionId: engine.missionId` à `useMissionSync`.
+- **Fichiers touchés** : `domain/types.ts`, `services/missionSupabase.ts`, `services/missionSync.ts`,
+  `hooks/useMissionEngine.ts`, `hooks/useMissionSync.ts`, `pages/MissionPage.tsx`. Aucun nouveau
+  composant UI — décision explicite de ne pas ajouter de bouton "Démarrer" puisque la prod démarre
+  déjà automatiquement.
+- **Risques** : dépend de la policy RLS `reca-app` `missions_update_admin_or_operator` (2026-07-25,
+  déjà appliquée en live) pour que l'UPDATE passe côté opérateur — sans elle, `startMission` échoue
+  silencieusement (best-effort, aucun crash, mais la Mission reste `planifiee`). Découverte au
+  passage : `reca-app` avait aussi une dérive de schéma non documentée (rôle `operateur` + policy
+  `mission_items_update_operator` appliqués à la main le 2026-07-24, jamais committés côté
+  `reca-app`) — réconciliée par une migration dédiée côté `reca-app`, voir son propre `memory/`.
+- **Résultat** : `tsc -b`/`npm run lint`/`npm run build` propres (après `npm install`, `node_modules`
+  absent au départ dans ce sandbox). Non testé en navigateur dans cette session (aucun serveur/compte
+  de test lancé ici) — repose sur le compte de test `operateur@groupereca.ca` déjà documenté dans
+  `memory/memory.md` pour une future vérification de bout en bout.
+
 ---
 
 ## Actifs
