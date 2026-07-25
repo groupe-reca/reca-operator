@@ -1,0 +1,10 @@
+ordre;adresse;lat;lng;statut;code_probleme;heure_arrivee;heure_depart
+1;202 Rue Scott, Saint-Jérôme, QC J7Z 1H1;45.788659;-74.003894;en_attente;;;
+2;220 Rue Scott, Saint-Jérôme, QC J7Z 1H1;45.788717;-74.003238;en_attente;;;
+3;232 Rue Scott, Saint-Jérôme, QC J7Z 1H1 ;45.788749;-74.002847;en_attente;;;
+4;244 Rue Scott, Saint-Jérôme, QC J7Z 1H1 ;45.788616;-74.002164;en_attente;;;
+5;252 Rue Scott, Saint-Jérôme, QC J7Z 1H1;45.789083;-74.001786;en_attente;;;
+6;769 Rue Saint-Georges, Saint-Jérôme, QC J7Z 5C8;45.788500;-74.003793;en_attente;;;
+7;751 Rue Saint-Georges, Saint-Jérôme, QC J7Z 5C8;45.788210;-74.003600;en_attente;;;
+8;703 Rue Saint-Georges, Saint-Jérôme, QC J7Z 5C8;45.787630;-74.003130;en_attente;;;
+9;687 Rue Saint-Georges, Saint-Jérôme, QC J7Z 5C8;45.787175;-74.002580;en_attente;;;
