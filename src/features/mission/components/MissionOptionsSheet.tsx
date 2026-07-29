@@ -1,11 +1,27 @@
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { Minus, Plus, RotateCcw, SlidersHorizontal, Volume2, X } from 'lucide-react'
+import {
+  Minus,
+  Pause,
+  Play,
+  Plus,
+  RotateCcw,
+  SlidersHorizontal,
+  Square,
+  Volume2,
+  X,
+} from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { DEFAULT_ENGINE_CONFIG } from '../domain/config'
 import type { EngineConfig } from '../domain/config'
+import type { MissionPhase } from '../domain/types'
 
-type SettingsModalProps = {
+type MissionOptionsSheetProps = {
   open: boolean
+  phase: MissionPhase
+  onPlay: () => void
+  onPause: () => void
+  onStop: () => void
   config: EngineConfig
   onChange: (patch: Partial<EngineConfig>) => void
   onTestVoice: () => void
@@ -67,12 +83,24 @@ const displayValue = (config: EngineConfig, field: NumericField) =>
   config[field.key] / field.factor
 
 /**
- * Modale de réglage **runtime** de tous les paramètres du moteur. Purement
- * présentationnelle : elle lit la config courante et remonte chaque changement
- * via `onChange` (→ `MissionEngine.setConfig`). Aucune persistance : un
- * rechargement rétablit les valeurs par défaut.
+ * Feuille « Plus d'options » — point d'entrée **production** (plus de gating
+ * dev) pour le contrôle manuel (Play/Pause/Stop, migré depuis l'ancienne
+ * `DevControlBar`) et le réglage runtime de tous les paramètres du moteur.
+ * Purement présentationnelle : elle lit la config/phase courantes et remonte
+ * chaque changement via les callbacks (→ `MissionEngine`).
  */
-export function SettingsModal({ open, config, onChange, onTestVoice, voiceName, onClose }: SettingsModalProps) {
+export function MissionOptionsSheet({
+  open,
+  phase,
+  onPlay,
+  onPause,
+  onStop,
+  config,
+  onChange,
+  onTestVoice,
+  voiceName,
+  onClose,
+}: MissionOptionsSheetProps) {
   // Brouillon local des champs texte : permet une saisie libre (champ vide,
   // frappe intermédiaire) sans reformater à chaque touche.
   const [draft, setDraft] = useState<Record<NumericKey, string>>(() => seedDraft(config))
@@ -117,7 +145,7 @@ export function SettingsModal({ open, config, onChange, onTestVoice, voiceName, 
           <motion.div
             role="dialog"
             aria-modal="true"
-            aria-label="Réglages du moteur"
+            aria-label="Plus d'options"
             className="max-h-[90svh] w-full overflow-y-auto rounded-t-modal border-t border-border-subtle bg-surface-card p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]"
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
@@ -128,7 +156,7 @@ export function SettingsModal({ open, config, onChange, onTestVoice, voiceName, 
             <div className="mb-1 flex items-center justify-between">
               <h2 className="flex items-center gap-2 text-subtitle font-semibold text-text">
                 <SlidersHorizontal className="size-5 text-accent-strong" aria-hidden="true" />
-                Paramètres du moteur
+                Plus d'options
               </h2>
               <button
                 type="button"
@@ -139,6 +167,18 @@ export function SettingsModal({ open, config, onChange, onTestVoice, voiceName, 
                 <X className="size-5" aria-hidden="true" />
               </button>
             </div>
+
+            <div className="mb-4">
+              <h3 className="mb-2 px-1 text-label font-semibold uppercase tracking-wide text-text-muted">
+                Contrôle manuel
+              </h3>
+              <div className="flex gap-2">
+                <PhaseButton icon={Play} label="Play" colorClass="bg-status-success" active={phase === 'RUNNING'} onClick={onPlay} />
+                <PhaseButton icon={Pause} label="Pause" colorClass="bg-status-warning" active={phase === 'PAUSED'} onClick={onPause} />
+                <PhaseButton icon={Square} label="Stop" colorClass="bg-status-danger" active={phase === 'STOPPED'} onClick={onStop} />
+              </div>
+            </div>
+
             <p className="mb-4 text-label text-text-faint">
               Réglage en direct — les changements s'appliquent immédiatement. Non persistant :
               rechargez pour revenir aux valeurs par défaut.
@@ -157,7 +197,7 @@ export function SettingsModal({ open, config, onChange, onTestVoice, voiceName, 
 
               <ToggleRow
                 label="Mode développement"
-                hint="Masque cette barre s'il est désactivé (rechargez pour revenir)."
+                hint="Désactivé : le moteur démarre automatiquement. Activé : attend un Play manuel."
                 checked={config.devControls}
                 onToggle={() => onChange({ devControls: !config.devControls })}
               />
@@ -222,6 +262,30 @@ function seedDraft(config: EngineConfig): Record<NumericKey, string> {
   return out
 }
 
+type PhaseButtonProps = {
+  icon: LucideIcon
+  label: string
+  colorClass: string
+  active: boolean
+  onClick: () => void
+}
+
+function PhaseButton({ icon: Icon, label, colorClass, active, onClick }: PhaseButtonProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`flex flex-1 flex-col items-center justify-center gap-1 rounded-control py-2.5 text-white transition duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 ${colorClass} ${
+        active ? 'ring-2 ring-white/70' : 'opacity-90 hover:opacity-100'
+      }`}
+    >
+      <Icon className="size-5" aria-hidden="true" />
+      <span className="text-[11px] font-semibold uppercase tracking-wide">{label}</span>
+    </button>
+  )
+}
+
 type NumberRowProps = {
   field: NumericField
   value: string
@@ -260,15 +324,7 @@ function NumberRow({ field, value, onType, onStep }: NumberRowProps) {
   )
 }
 
-function StepButton({
-  icon: Icon,
-  label,
-  onClick,
-}: {
-  icon: typeof Minus
-  label: string
-  onClick: () => void
-}) {
+function StepButton({ icon: Icon, label, onClick }: { icon: LucideIcon; label: string; onClick: () => void }) {
   return (
     <button
       type="button"

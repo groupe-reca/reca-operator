@@ -135,21 +135,46 @@
   `eslint` OK. Mémoire corrigée (les 2 anciennes mentions « tri toujours par distance » sont
   révisées).
 
+- [x] **tache4 (reprise) — Refonte écran Mission (`.input/design2.png`) + module carte Mapbox (2026-07-29)**
+  Reprend tache4 (carte Mapbox, en pause depuis le Sprint 003) : `design2.png` résout le conflit
+  portrait/paysage de l'ancienne maquette `design-v3.png`. Portée confirmée avec le client (3
+  questions) : carte MVP fidèle au design, footer « Plus d'options » = nouveau point d'entrée
+  **production** des réglages, en-tête branché sur de vraies données Supabase.
+  **Moteur** : `MissionSnapshot` gagne `allStops` (copie non filtrée triée par `ordre`, additive —
+  `otherStops` inchangé) pour exposer aussi les stops `TERMINE` à la carte.
+  **Données** : `Mission.secteur` → `routeName`/`operatorName`/`equipmentName` ;
+  `missionSupabase.ts` joint `employees.prenom/nom`, `routes.nom` (`missions.route_id`),
+  `equipments.nom` (`missions.equipment_id`, nullable) — aucune migration `reca-app` nécessaire
+  (schéma déjà confirmé disponible). `useMissionEngine` réexpose `missionLabel`/`routeName`/
+  `operatorName`/`equipmentName`.
+  **Carte** : mirror exact du pattern Mapbox de `reca-app` (`mapbox-gl@^3.26.0` direct, pas de
+  wrapper React) — `lib/mapboxClient.ts` → `hooks/useMapboxMap.ts` (style par défaut
+  `dark-v11`) → `components/map/MapCanvas.tsx` (générique) → `features/mission/components/map/
+  MissionMap.tsx` (tracé GeoJSON, marqueurs custom colorés par statut via `statusToneColors.ts`,
+  marqueur position + halo + flèche de cap masquée si `heading===null`, recentrer, bascule
+  sombre/satellite ; clés `routeKey`/`markersKey` mémorisées pour ne pas recréer marqueurs/tracé à
+  chaque fix GPS, seuls `ordre`/`status` important visuellement). Badge « N » statique
+  (`CompassBadge.tsx`, la carte ne tourne jamais). `@types/geojson` ajouté en devDependency (sinon
+  absent, `reca-app` l'obtient via `@mapbox/mapbox-gl-draw` que reca-operator n'installe pas).
+  **Redesign** : `MissionHeaderBar.tsx` (nouveau), `SmartCounter` (+ `variant='pill'`),
+  `CurrentMissionCard` (« Prochaine résidence », 2 colonnes si ATTENTION), `MissionCountersRow.tsx`
+  (nouveau), `StopRow`/`StopListHeader` (badge numéroté par tone, libellé de tri corrigé — l'ordre
+  est celui de la mission, pas la proximité, erreur résiduelle du 2026-07-25), `MissionFooter.tsx`
+  (nouveau, remplace `DevControlBar.tsx` supprimé — Annonce vocale = mute toggle `voiceEnabled`),
+  `MissionOptionsSheet.tsx` (renommage `SettingsModal.tsx` + Play/Pause/Stop migrés, toujours
+  accessible). **Décision** : le bouton icône « reprise » sur les lignes terminales de la liste
+  reste décoratif (aucun flux de reprise manuelle dans le moteur — backlog séparé).
+  Vérifié : `tsc -b` OK, `eslint` OK, `npm run build` OK. **Non vérifié en direct dans un
+  navigateur** (pas d'identifiants de test disponibles dans cette session — `PREVIEW_BYPASS`
+  supprimé, auth réelle requise) : à valider manuellement avec le compte `operateur@groupereca.ca`
+  (`?sim=1` pour piloter le GPS) avant de considérer le rendu visuel définitif.
+
 ## Abandonnées / en suspens
 
-- [ ] **tache4 — Carte Mapbox interactive** (`.input/tache4.md`, maquette `.input/design-v3.png`)
-  Mise en pause à la demande du client. Grosse tâche : carte satellite Mapbox, badges de
-  numéros civiques, halo résidence active, marqueurs colorés par statut, boussole, cône de
-  vision, zones. **Conflit non tranché** : maquette v3 en **paysage** vs contrainte « mobile
-  portrait ». Reprendre par cette question (orientation) + portée carte avant de coder.
-  `mapbox-gl` non installé ; token présent.
+- (aucune)
 
 ## À faire (backlog / sprints futurs)
 
-- [ ] **Rôle `operateur` dans Supabase** : la table `users` partagée ne le contient pas
-  encore.
-- [ ] **Carte Mapbox** : volontairement absente des sprints actuels (token présent,
-  `mapbox-gl` non installé). À valider quand la logique GPS sera stabilisée.
 - [ ] **Test runner** : aucun configuré ; en ajouter un avant d'écrire des tests. La
   logique du `MissionEngine` est pure (hors React) → idéale pour des tests unitaires
   (Vitest) de la machine à états.
@@ -159,17 +184,19 @@
   option désactivable) — cf. maquette `.input/design.png`.
 - [ ] **Persistance du journal** : `MissionEngine` tient le journal des durées en mémoire
   seule. À synchroniser plus tard (Supabase / module Routes) pour les statistiques.
-- [ ] **Notes ATTENTION réelles** : actuellement fictives (`services/attentionFixtures.ts`).
-  À alimenter depuis le contrat de la résidence quand le module Routes sera branché.
 - [ ] **Voix — annonces futures** (préparées, non implantées) : arrivée détectée, intervention
   commencée/terminée, résidence ignorée, retour vers une résidence problématique. Ajouter les
   événements moteur correspondants + handlers dans `VoiceAnnouncementManager` + catégories dans
-  `EngineConfig`/`SettingsModal`. (Le bus d'événements et l'anti-répétition existent déjà —
+  `EngineConfig`/`MissionOptionsSheet`. (Le bus d'événements et l'anti-répétition existent déjà —
   Sprint 005.)
-- [ ] **Voix — accès prod aux réglages** : le toggle « Assistance vocale » n'est atteignable
-  que via `SettingsModal`, ouverte par la `DevControlBar` (dev only). Prévoir un accès aux
-  réglages hors mode dev. Envisager aussi un plugin TTS natif (Capacitor) derrière
-  `VoiceService` si l'app est empaquetée.
+- [ ] **Carte Mapbox — au-delà du MVP (2026-07-29)** : badges de numéros civiques, cône de
+  vision, zones de contrat (stationnement/trottoir/escalier), cache hors-ligne des tuiles,
+  boussole pilotée par l'orientation réelle du téléphone (actuellement un badge « N » statique,
+  la carte ne tourne jamais). Voir `memory/plans.md` (tache4, archivé) pour le détail du MVP livré.
+- [ ] **Reprise manuelle d'un stop « À reprendre »** : le bouton icône dédié affiché sur les
+  lignes terminales de la liste (check vert / refresh orange) est **décoratif** depuis la refonte
+  2026-07-29 — aucune action de reprise manuelle n'existe dans le moteur (seul le GPS ré-engage un
+  stop via `ordre`). Construire un vrai flux si le besoin se confirme.
 
 - [x] **Démarrage réel de la Mission côté RECA App (2026-07-25)** — jusqu'ici, `reca-operator`
   ne modifiait jamais la table `missions` (seulement `mission_items.statut`) : le bouton Play ne

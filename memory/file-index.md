@@ -29,10 +29,14 @@
     **Reprise** : `rehydrateStop` conserve les statuts terminaux persistés (`loadMission`/`play`).
     **Write-back** : émet l'événement neutre `STOP_FINALIZED {missionItemId, outcome}` depuis
     `completeActive`/`reportProblem`. Exporte `MissionSnapshot`, `ActiveMissionView`, `CounterView`.
+    2026-07-29 — `MissionSnapshot` gagne **`allStops: Stop[]`** (copie non filtrée de tous les
+    stops triée par `ordre`, y compris `TERMINE` et le stop actif — additif, `otherStops`
+    inchangé) pour alimenter la carte Mapbox.
 - **domain** (logique pure, générique Signa) :
   - `domain/types.ts` — `LatLng`, `GpsPosition` (avec `speed`/`heading`), `Stop` (avec
-    `problemCode`, **`missionItemId`**, **`operatorMessage`**), `Mission` (2026-07-25 — gagne
-    `id: string | null`, clé d'écriture de `startMission`), `MissionPhase`
+    `problemCode`, **`missionItemId`**, **`operatorMessage`**), `Mission` (`id: string | null` ;
+    2026-07-29 — `secteur` remplacé par **`routeName`/`operatorName`/`equipmentName`**, tous
+    `string | null`), `MissionPhase`
   - `domain/status.ts` — union `MissionStatus` (9 statuts), `STATUS_CONFIG`, `restingIconFor`
   - `domain/config.ts` — constantes de **défaut** : `ARRIVAL_RADIUS_METERS`, `LOW_SPEED_KMH`,
     `DEPART_SPEED_KMH`, `APPROACH_DELAY_MS`, `DEPART_DELAY_MS`, `DEV_CONTROLS` ; + type
@@ -50,6 +54,9 @@
   - `services/missionSupabase.ts` — `loadAssignedMission()` : résout l'opérateur
     (`auth.uid → employees.user_id → missions.operator_id`), charge Mission + `mission_items`
     joints aux contrats. `null` = aucune mission assignée. 2026-07-25 — renvoie aussi `id`.
+    2026-07-29 — joint aussi `employees.prenom/nom`, `routes.nom` (via `missions.route_id`) et
+    `equipments.nom` (via `missions.equipment_id`, nullable) → `Mission.routeName`/
+    `operatorName`/`equipmentName` (en-tête de l'écran Mission, plus de placeholder).
   - `services/missionSync.ts` — `persistItemStatus(id, statut)` : **point d'écriture unique**
     vers `mission_items` (prêt hors-ligne, ne lève jamais). 2026-07-25 — gagne `startMission(missionId)` :
     `missions.update({statut:'en_cours', heure_debut}).eq('statut','planifiee')`, idempotent, même
@@ -62,21 +69,57 @@
   - `hooks/useMissionEngine.ts` — **adaptateur mince** : instancie l'engine, `useSyncExternalStore`,
     pousse GPS + tick 1 s, charge la **Mission Supabase** (`loadAssignedMission`), simulateur
     `?sim=1` (cycle complet). Réexpose snapshot + commandes + `devControls` + `config`/`setConfig`
-    + **`noMission`/`isFetchingMission`/`refetchMission`** + **`missionId`** (2026-07-25).
+    + **`noMission`/`isFetchingMission`/`refetchMission`** + **`missionId`** (2026-07-25) +
+    **`missionLabel`/`routeName`/`operatorName`/`equipmentName`** (2026-07-29, lus directement sur
+    la `Mission` chargée, pour `MissionHeaderBar`).
   - `hooks/useMissionSync.ts` — pont write-back (glue) : abonné à `engine.onEvent`, route
     `STOP_FINALIZED` → `persistItemStatus` ; expose `connectionLost` (bannière « Connexion perdue »).
     2026-07-25 — accepte aussi `missionId`, route `MISSION_STARTED` → `startMission` (démarrage
     réel de la Mission, fresh start uniquement, idempotent).
-- **components** (présentationnels) : `components/SmartCounter.tsx`,
-  `components/CurrentMissionCard.tsx`, `components/StopListHeader.tsx`,
-  `components/StopList.tsx`, `components/StopRow.tsx`, `components/ProblemModal.tsx`
-  (8 codes), `components/SettingsModal.tsx` (réglage runtime de tous les paramètres — tache5),
-  `components/DevControlBar.tsx` (Play/Pause/Stop/Problème/**Réglages**, dev only),
-  `components/statusTone.ts` (tone → classes)
-- **pages** : `pages/MissionPage.tsx` (layout plein écran ; écrans « Aucune mission assignée » +
-  bannière « Connexion perdue » ; branche `useMissionSync`)
-- **Supprimés au Sprint 003** : `MissionHeader.tsx`, `MissionCard.tsx`, `MissionFooter.tsx`,
-  `TransportControls.tsx` (remplacés par SmartCounter / CurrentMissionCard / DevControlBar).
+- **components** (présentationnels) : `components/MissionHeaderBar.tsx` (2026-07-29, nouveau —
+  logo + Mission/Route + opérateur/équipement + `SmartCounter` en pastille compacte),
+  `components/SmartCounter.tsx` (2026-07-29 — gagne `variant?: 'hero' | 'pill'`, même logique
+  d'affichage restylée), `components/CurrentMissionCard.tsx` (« Prochaine résidence » ; 2026-07-29 —
+  deux colonnes avec panneau ATTENTION à droite quand `attention.length > 0`, sinon pleine largeur),
+  `components/MissionCountersRow.tsx` (2026-07-29, nouveau — à faire/terminées/à reprendre +
+  barre de progression), `components/StopListHeader.tsx`, `components/StopList.tsx`,
+  `components/StopRow.tsx` (2026-07-29 — badge numéroté (`stop.ordre`) coloré par tone au lieu
+  de l'icône seule), `components/ProblemModal.tsx` (8 codes), `components/MissionOptionsSheet.tsx`
+  (2026-07-29, renommage de `SettingsModal.tsx` — réglage runtime de tous les paramètres — tache5 —
+  **+ Play/Pause/Stop migrés depuis `DevControlBar`**, point d'entrée **production**, plus de
+  gating dev), `components/MissionFooter.tsx` (2026-07-29, nouveau, remplace `DevControlBar.tsx`
+  supprimé — Problème / Annonce vocale (mute toggle `voiceEnabled`) / Plus d'options, toujours
+  visible), `components/statusTone.ts` (tone → classes Tailwind).
+  - `components/map/` (2026-07-29, nouveau — module carte Mapbox, seul endroit du module Mission
+    qui connaît `mapbox-gl`) : `MissionMap.tsx` (composant feature : tracé GeoJSON de la route,
+    marqueurs custom colorés par statut, marqueur position + halo + flèche de cap masquée si
+    `heading===null`, recentrer, bascule sombre/satellite via `map.setStyle`), `statusToneColors.ts`
+    (`TONE_HEX`, équivalent hex de `StatusTone` pour les marqueurs), `mapBounds.ts`
+    (`boundsFromPoints`, pur), `CompassBadge.tsx` (badge « N » statique, la carte ne tourne
+    jamais), `MapControls.tsx` (boutons flottants recentrer/calque).
+- **pages** : `pages/MissionPage.tsx` (layout plein écran : `MissionHeaderBar` → `MissionMap` →
+  bannière connexion perdue → `CurrentMissionCard`/`EmptyHero` → `MissionCountersRow` →
+  `StopListHeader`/`StopList` → `MissionFooter` toujours rendu ; `ProblemModal` +
+  `MissionOptionsSheet` montés en permanence ; branche `useMissionSync`)
+- **Supprimés au Sprint 003** : `MissionHeader.tsx`, `MissionCard.tsx`, `MissionFooter.tsx` (v1),
+  `TransportControls.tsx`. **Supprimé 2026-07-29** : `DevControlBar.tsx` (Play/Pause/Stop migrés
+  dans `MissionOptionsSheet.tsx`, Problème migré dans le nouveau `MissionFooter.tsx`).
+
+## Module transverse : Carte (`src/lib/mapboxClient.ts`, `src/hooks/useMapboxMap.ts`,
+`src/components/map/MapCanvas.tsx`) — 2026-07-29
+
+> Mirror exact du pattern Mapbox de `reca-app` (`mapbox-gl` direct, pas de wrapper React).
+> Générique — aucune connaissance du domaine Mission, réutilisable par toute future carte Signa.
+
+- `lib/mapboxClient.ts` — `MAPBOX_TOKEN`/`isMapboxConfigured` (`VITE_MAPBOX_TOKEN`).
+- `hooks/useMapboxMap.ts` — instancie `mapboxgl.Map` (style par défaut
+  `mapbox://styles/mapbox/dark-v11`), try/catch autour du constructeur (token invalide → erreur
+  capturée, jamais un crash), `ResizeObserver`/`instance.resize()` (conteneur à hauteur flexible,
+  pas plein écran).
+- `components/map/MapCanvas.tsx` — wrapper présentationnel : repli « Carte non disponible » si pas
+  de token, repli erreur, sinon rend le conteneur et appelle `onMapReady(map)`.
+- Dépendances : `mapbox-gl@^3.26.0` (+ `@types/geojson` en devDependency, nécessaire pour typer
+  les objets GeoJSON passés à `addSource` sans dépendre de `@mapbox/mapbox-gl-draw`).
 
 ## Module transverse : Voix (`src/core/voice/`) — Sprint 004
 
@@ -99,17 +142,22 @@
   `useMissionEngine` réexpose `subscribeEvents`.
 - Réglages `voiceEnabled` + 5 catégories (`voiceStart/voiceNextAddress/voiceSide/voiceAlerts/
   voiceEnd`) dans `EngineConfig` (`domain/config.ts`) ; seuils G/D `SIDE_*` (hors UI). UI dans
-  `SettingsModal` (section « Assistance vocale » : master + 5 toggles + « Tester la voix »).
-  Géométrie G/D : `domain/geo.ts` (`bearingDegrees`, `residenceSide`).
+  `MissionOptionsSheet` (2026-07-29, renommage de `SettingsModal` ; section « Assistance vocale » :
+  master + 5 toggles + « Tester la voix »). Géométrie G/D : `domain/geo.ts` (`bearingDegrees`,
+  `residenceSide`).
 
 ## Partagé / transverse
 
 - **app / entrée** : `src/main.tsx`, `src/app/App.tsx`, `src/routes/router.tsx`
 - **UI primitives** : `src/components/ui/{Button,Input,Card,Badge,Toaster}.tsx`
 - **shared** : `src/components/shared/StatusBadge.tsx`
-- **lib** : `src/lib/supabaseClient.ts`, `src/lib/queryClient.ts`
+- **lib** : `src/lib/supabaseClient.ts`, `src/lib/queryClient.ts`, `src/lib/mapboxClient.ts`
+  (2026-07-29, `MAPBOX_TOKEN`/`isMapboxConfigured`)
 - **stores** : `src/stores/toastStore.ts` (toast via `useSyncExternalStore`)
-- **hooks partagés** : `src/hooks/useBreakpoint.ts` (`useIsMobile()`)
+- **hooks partagés** : `src/hooks/useBreakpoint.ts` (`useIsMobile()`), `src/hooks/useMapboxMap.ts`
+  (2026-07-29, générique — mirror du hook Mapbox de `reca-app`)
+- **map (générique)** : `src/components/map/MapCanvas.tsx` (2026-07-29, wrapper Mapbox
+  présentationnel, aucune connaissance du domaine)
 - **styles** : `src/styles/index.css` (Tailwind v4 + tokens `@theme`, thème sombre)
 - **assets** : `src/assets/logo-clair.svg`, `src/assets/logo-sombre.svg`
 
@@ -118,5 +166,5 @@
 - `vite.config.ts` (port 3050, alias `@`, plugins react + tailwind)
 - `tsconfig.json` / `tsconfig.app.json` / `tsconfig.node.json` (strict)
 - `ecosystem.config.cjs` (PM2, sert `dist/` sur 3050)
-- `.env.local` (gitignored) / `.env.example`
+- `.env.local` (gitignored) / `.env.example` (2026-07-29 — documente aussi `VITE_MAPBOX_TOKEN`)
 - `.input/` : specs (`tacheN.md`), maquette (`design.png`), `route.csv` source, `supabase`

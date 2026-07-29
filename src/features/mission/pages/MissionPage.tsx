@@ -1,24 +1,25 @@
 import { useState } from 'react'
-import { Loader2, MapPin, RefreshCw, TriangleAlert, WifiOff } from 'lucide-react'
-import { SmartCounter } from '../components/SmartCounter'
+import { Loader2, RefreshCw, TriangleAlert, WifiOff } from 'lucide-react'
+import { MissionHeaderBar } from '../components/MissionHeaderBar'
+import { MissionMap } from '../components/map/MissionMap'
 import { CurrentMissionCard } from '../components/CurrentMissionCard'
+import { MissionCountersRow } from '../components/MissionCountersRow'
 import { StopListHeader } from '../components/StopListHeader'
 import { StopList } from '../components/StopList'
-import { DevControlBar } from '../components/DevControlBar'
+import { MissionFooter } from '../components/MissionFooter'
 import { ProblemModal } from '../components/ProblemModal'
-import { SettingsModal } from '../components/SettingsModal'
+import { MissionOptionsSheet } from '../components/MissionOptionsSheet'
 import { Button } from '@/components/ui/Button'
 import { useMissionEngine } from '../hooks/useMissionEngine'
 import { useVoiceBridge } from '../hooks/useVoiceBridge'
 import { useMissionSync } from '../hooks/useMissionSync'
-import { formatAccuracy } from '../domain/format'
 import type { ProblemCode } from '../domain/problemCodes'
 
 export function MissionPage() {
   const engine = useMissionEngine()
   const { snapshot } = engine
   const [problemOpen, setProblemOpen] = useState(false)
-  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [optionsOpen, setOptionsOpen] = useState(false)
 
   const running = snapshot.phase === 'RUNNING'
 
@@ -41,23 +42,26 @@ export function MissionPage() {
     return <NoMissionScreen onRefresh={engine.refetchMission} isRefreshing={engine.isFetchingMission} />
   }
 
+  const reportedCount = snapshot.allStops.filter((s) => s.status === 'NON_TERMINE').length
+  const todoCount = Math.max(0, snapshot.totalCount - snapshot.completedCount - reportedCount)
+
   return (
     <div className="flex h-[100svh] flex-col bg-surface-bg">
-      {/* En-tête fixe : progression + GPS (dev) à gauche, compteur à droite */}
-      <header className="flex shrink-0 items-start justify-between gap-4 px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-2">
-        <div className="min-w-0">
-          <p className="text-label font-semibold uppercase tracking-wide text-text-muted">
-            {snapshot.completedCount} / {snapshot.totalCount} terminées
-          </p>
-          {engine.devControls && (
-            <p className="mt-1 flex items-center gap-1.5 text-label text-text-faint">
-              <MapPin className="size-3.5 shrink-0 text-status-success" aria-hidden="true" />
-              <span className="tabular-nums">{formatAccuracy(snapshot.position)}</span>
-            </p>
-          )}
-        </div>
-        <SmartCounter counter={snapshot.counter} />
-      </header>
+      <MissionHeaderBar
+        missionLabel={engine.missionLabel}
+        routeName={engine.routeName}
+        operatorName={engine.operatorName}
+        equipmentName={engine.equipmentName}
+        counter={snapshot.counter}
+      />
+
+      {/* Carte de la mission : tracé, marqueurs par statut, position + cap. */}
+      <MissionMap
+        stops={snapshot.allStops}
+        activeOrdre={snapshot.activeMission?.stop.ordre ?? null}
+        position={snapshot.position}
+        className="mx-4 mb-3 h-[32svh] shrink-0 rounded-card"
+      />
 
       {/* Bannière : perte de connexion (session conservée, reconnexion en cours). */}
       {sync.connectionLost && (
@@ -93,6 +97,13 @@ export function MissionPage() {
               </p>
             )}
 
+            <MissionCountersRow
+              todoCount={todoCount}
+              completedCount={snapshot.completedCount}
+              reportedCount={reportedCount}
+              totalCount={snapshot.totalCount}
+            />
+
             {snapshot.otherStops.length > 0 && (
               <>
                 <StopListHeader />
@@ -103,20 +114,13 @@ export function MissionPage() {
         )}
       </main>
 
-      {/* Barre de contrôle (dev uniquement) */}
-      {engine.devControls && (
-        <footer className="shrink-0">
-          <DevControlBar
-            phase={snapshot.phase}
-            canReportProblem={snapshot.activeMission !== null}
-            onPlay={engine.play}
-            onPause={engine.pause}
-            onStop={engine.stop}
-            onProblem={() => setProblemOpen(true)}
-            onSettings={() => setSettingsOpen(true)}
-          />
-        </footer>
-      )}
+      <MissionFooter
+        canReportProblem={snapshot.activeMission !== null}
+        onProblem={() => setProblemOpen(true)}
+        voiceEnabled={snapshot.config.voiceEnabled}
+        onToggleVoice={() => engine.setConfig({ voiceEnabled: !snapshot.config.voiceEnabled })}
+        onMoreOptions={() => setOptionsOpen(true)}
+      />
 
       <ProblemModal
         open={problemOpen}
@@ -124,13 +128,17 @@ export function MissionPage() {
         onClose={() => setProblemOpen(false)}
       />
 
-      <SettingsModal
-        open={settingsOpen}
+      <MissionOptionsSheet
+        open={optionsOpen}
+        phase={snapshot.phase}
+        onPlay={engine.play}
+        onPause={engine.pause}
+        onStop={engine.stop}
         config={snapshot.config}
         onChange={engine.setConfig}
         onTestVoice={voice.testVoice}
         voiceName={voice.voiceName}
-        onClose={() => setSettingsOpen(false)}
+        onClose={() => setOptionsOpen(false)}
       />
     </div>
   )

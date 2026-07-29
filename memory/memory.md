@@ -233,6 +233,67 @@
   vérifier par un `git log`/`grep` dans le repo `reca-app` avant de supposer qu'un changement partagé
   est documenté des deux côtés.
 
+## Suivi (2026-07-29) — Refonte écran Mission + module carte Mapbox (tache4 reprise)
+
+- **Nouveau design de référence** : `.input/design2.png` — remplace `design.png` comme cible
+  visuelle de l'écran Mission (portrait, résout le conflit paysage de l'ancien `design-v3.png`,
+  qui n'existe d'ailleurs plus dans `.input/`). `design.png` reste la maquette du **thème
+  sombre**/tokens d'origine (toujours valide), `design2.png` ajoute la carte + le nouveau layout.
+- **Carte Mapbox = MVP, portée volontairement limitée** (confirmé client) : style sombre
+  (`dark-v11`) + bascule satellite, tracé de route, marqueurs colorés par statut (incl.
+  `TERMINE`), position GPS + halo + flèche de cap, recentrer. **Hors scope, backlog** : badges
+  de numéros civiques, cône de vision, zones de contrat, cache hors-ligne, boussole pilotée par
+  l'orientation réelle du téléphone (le badge « N » actuel est statique, la carte ne tourne
+  jamais — `map.rotateTo` n'est appelé nulle part).
+- **Architecture carte = mirror exact de `reca-app`**, pas une invention indépendante :
+  `mapbox-gl@^3.26.0` en direct (pas de `react-map-gl`/`maplibre`), 3 couches génériques
+  (`lib/mapboxClient.ts` → `hooks/useMapboxMap.ts` → `components/map/MapCanvas.tsx`, aucune
+  connaissance du domaine) puis un composant feature (`features/mission/components/map/
+  MissionMap.tsx`) qui seul connaît `Stop`/`MissionStatus`. `@types/geojson` a dû être ajouté en
+  devDependency explicite (absent par défaut ici, car `reca-app` l'obtient **transitivement**
+  via `@mapbox/mapbox-gl-draw`, que reca-operator n'installe pas).
+- **Perf carte vs fréquence GPS** : `MissionSnapshot` (et donc `allStops`) est une **nouvelle
+  référence d'objet à chaque fix GPS** (`recomputeDistances()` recrée les `Stop` à chaque
+  `updatePosition`), potentiellement plusieurs fois par seconde. `MissionMap.tsx` ne dépend
+  **jamais** directement de `stops` dans ses `useEffect` de tracé/marqueurs — il calcule des clés
+  mémorisées (`routeKey` = ordre+coordonnées, `markersKey` = ordre+statut) qui ne changent que
+  quand quelque chose de visuellement pertinent change, évitant de recréer tracé/marqueurs à
+  chaque fix GPS (seul le marqueur de position, qui doit bouger à chaque fix, dépend de
+  `position` directement). **Ne pas** faire dépendre ces effets de `stops` brut sans clé stable —
+  ça recréerait tous les marqueurs plusieurs fois par seconde.
+- **`MissionSnapshot.allStops`** (additif) : `otherStops` reste la liste filtrée utilisée par
+  `StopList` (masque `TERMINE` + le stop actif, décision produit inchangée) ; `allStops` est la
+  copie complète triée par `ordre` utilisée uniquement par la carte, qui a besoin de dessiner
+  aussi les stops terminés (marqueurs verts). Toujours garder cette distinction : ne jamais faire
+  filtrer `allStops`, ne jamais faire dessiner `otherStops` sur la carte.
+- **En-tête branché sur de vraies données Supabase** (plus de placeholder `secteur: ''`) :
+  `Mission.routeName`/`operatorName`/`equipmentName` viennent de jointures ajoutées à
+  `missionSupabase.loadAssignedMission()` (`routes.nom` via `missions.route_id`, `equipments.nom`
+  via `missions.equipment_id` nullable, `employees.prenom`/`nom`). Aucune migration `reca-app`
+  nécessaire — schéma déjà confirmé présent (voir recherche du 2026-07-29 dans ce suivi : `routes`
+  v2 n'a **plus** de colonne `secteur`, remplacée par un simple `nom` libre ; le concept de
+  véhicule/tracteur vit dans la table générique `equipments`, pas une colonne dédiée). `operatorName`
+  formaté `"Prénom N."` (ex. "Pierre G.") à l'affichage, pas stocké ainsi en base.
+- **Footer/réglages redessinés** : `DevControlBar.tsx` **supprimé** — son contenu (Play/Pause/
+  Stop) migre dans `MissionOptionsSheet.tsx` (renommage de `SettingsModal.tsx`), désormais
+  accessible en **production** (plus de gate `devControls` sur l'ouverture). Nouveau
+  `MissionFooter.tsx` toujours visible : Problème (inchangé), **Annonce vocale** = bascule rapide
+  mute/unmute (`setConfig({voiceEnabled: !voiceEnabled})` — décision prise pour lever l'ambiguïté
+  de la maquette, plus utile en conditions réelles qu'un simple test de diagnostic, qui reste
+  disponible dans la feuille « Plus d'options »), Plus d'options (ouvre la feuille). `config.devControls`
+  reste dans `EngineConfig` mais ne gate plus aucune UI — seulement son rôle d'origine (auto-play
+  en prod vs attente d'un Play manuel).
+- **Bouton de reprise décoratif** : les lignes « à reprendre »/« terminée » de la liste affichent
+  désormais une icône dédiée (check vert / refresh orange) au lieu du chevron, fidèle à
+  `design2.png`, mais **aucune action n'y est câblée** — le moteur n'a pas de mécanisme de reprise
+  manuelle d'un stop déjà finalisé (seul le GPS peut ré-engager un stop non final via `ordre`).
+  Backlog séparé si le besoin se confirme.
+- ⚠️ **Non vérifié en direct dans un navigateur** : `tsc -b`/`eslint`/`npm run build` sont propres,
+  mais aucun test manuel avec un vrai compte (`operateur@groupereca.ca`) n'a été fait dans cette
+  session (identifiants non disponibles, `PREVIEW_BYPASS` supprimé). À faire avant de considérer
+  le rendu visuel définitif — en particulier le comportement tactile scroll-page vs pan-carte sur
+  appareil réel, et la lisibilité du panneau ATTENTION à deux colonnes sur un petit écran.
+
 ## Essayé / rejeté
 
 - Le CSV de démo initial (Sprint 001) était factice : 20 « Rue Talon », séparé par

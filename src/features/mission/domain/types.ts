@@ -51,6 +51,11 @@ export type Mission = {
   /** Id `missions` Supabase (clé d'écriture du démarrage), null hors ligne. */
   id: string | null
   nom: string
-  secteur: string
+  /** Nom libre de la route/tournée (`routes.nom`), null si aucune route jointe. */
+  routeName: string | null
+  /** Nom d'affichage de l'opérateur assigné, null si non résolu. */
+  operatorName: string | null
+  /** Nom de l'équipement/véhicule assigné (`equipments.nom`), null si aucun. */
+  equipmentName: string | null
   stops: Stop[]
 }

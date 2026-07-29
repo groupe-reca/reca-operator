@@ -28,6 +28,13 @@ export type MissionSnapshot = {
   phase: MissionPhase
   activeMission: ActiveMissionView | null
   otherStops: Stop[]
+  /**
+   * Copie **non filtrée** de tous les stops (y compris `TERMINE` et le stop actif),
+   * triée par `ordre`. `otherStops` reste la source de la liste défilante (qui
+   * masque volontairement `TERMINE`) ; `allStops` sert aux vues qui ont besoin de
+   * tout représenter, comme la carte.
+   */
+  allStops: Stop[]
   counter: CounterView
   log: MissionLogEntry[]
   completedCount: number
@@ -109,6 +116,7 @@ const EMPTY_SNAPSHOT: MissionSnapshot = {
   phase: 'IDLE',
   activeMission: null,
   otherStops: [],
+  allStops: [],
   counter: { status: 'EN_ATTENTE', elapsedMs: 0, targetMs: null },
   log: [],
   completedCount: 0,
@@ -484,6 +492,8 @@ export class MissionEngine {
       // Suit l'ordre de la mission (séquence de la tournée), pas la distance GPS.
       .sort((a, b) => a.ordre - b.ordre)
 
+    const allStops = this.stops.map((s) => ({ ...s })).sort((a, b) => a.ordre - b.ordre)
+
     const activeMission: ActiveMissionView | null = active
       ? {
           stop: { ...active },
@@ -496,6 +506,7 @@ export class MissionEngine {
       phase: this.phase,
       activeMission,
       otherStops,
+      allStops,
       counter: this.buildCounter(active),
       log: [...this.log],
       completedCount,

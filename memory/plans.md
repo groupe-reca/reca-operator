@@ -191,6 +191,69 @@
 
 ---
 
+### tache4 (reprise) — Refonte écran Mission (`.input/design2.png`) + module carte Mapbox ✅
+
+- **Objectif** : reprendre tache4 (carte Mapbox, en pause depuis le Sprint 003 faute
+  d'orientation tranchée) — `design2.png` résout le conflit portrait/paysage. En même
+  temps, aligner tout l'écran Mission sur cette nouvelle maquette : en-tête enrichi
+  (Mission #, Route, opérateur, équipement, statut), carte interactive, carte
+  "prochaine résidence" + panneau ATTENTION, ligne de compteurs + progression, liste
+  à badges numérotés, footer à 3 actions (Problème / Annonce vocale / Plus d'options)
+  qui remplace `DevControlBar` (dev-only) par un point d'entrée production.
+- **Portée confirmée avec le client** (3 questions, options recommandées retenues) :
+  (1) carte = MVP fidèle au design (style sombre + bascule satellite, tracé de route,
+  marqueurs par statut incl. `TERMINE`, position+halo+cap, recentrer) — hors scope :
+  badges civiques, cône de vision, zones, cache hors-ligne, boussole orientation
+  téléphone. (2) "Plus d'options" = nouveau point d'entrée prod des réglages +
+  Play/Pause/Stop (remplace `DevControlBar`). (3) En-tête branché sur de vraies
+  données Supabase (pas de placeholder).
+- **Recherche préalable** : `reca-app` a déjà un module Mapbox mature en prod
+  (`mapbox-gl` direct, pas de wrapper React) — pattern réutilisé à l'identique :
+  `lib/mapboxClient.ts` → `hooks/useMapboxMap.ts` → `components/map/MapCanvas.tsx`
+  (générique, 0 connaissance domaine) → composant feature (`MissionMap.tsx`, mirror de
+  `MissionMapView.tsx` de reca-app). Schéma Supabase confirmé (sans migration reca-app
+  nécessaire) : `employees.prenom/nom`, `equipments.nom` (via `missions.equipment_id`,
+  nullable), `routes.nom` (via `missions.route_id`, not null, plus de colonne
+  `secteur` — supprimée avec l'ancien schéma v1 `routes`).
+- **Étapes** : (1) moteur — `MissionSnapshot.allStops` (copie non filtrée de
+  `otherStops`, additif, pour exposer aussi les stops `TERMINE` à la carte).
+  (2) `domain/types.ts` `Mission` : `secteur` → `routeName`/`operatorName`/
+  `equipmentName` ; `missionSupabase.ts`/`missionMapping.ts` étendus (jointures
+  `routes`/`equipments`/`employees.prenom,nom`). (3) `npm install mapbox-gl` +
+  `lib/mapboxClient.ts` + `hooks/useMapboxMap.ts` + `components/map/MapCanvas.tsx`
+  (transverses). (4) `features/mission/components/map/` : `statusToneColors.ts`
+  (hex par tone), `mapBounds.ts`, `CompassBadge.tsx` (N statique, carte jamais tournée),
+  `MapControls.tsx` (recentrer + bascule satellite/sombre), `MissionMap.tsx` (tracé
+  GeoJSON + marqueurs custom par statut + marqueur position/halo/flèche de cap,
+  masquée si `heading===null`). (5) Redesign : `MissionHeaderBar.tsx` (nouveau),
+  `CurrentMissionCard.tsx` (2 colonnes si attention), `MissionCountersRow.tsx`
+  (nouveau), `StopRow.tsx`/`StopListHeader.tsx` (badge numéroté par tone, bouton
+  terminal décoratif seulement — pas de reprise manuelle dans cette tâche),
+  `MissionFooter.tsx` (nouveau, remplace `DevControlBar.tsx` supprimé — Annonce
+  vocale = mute toggle `voiceEnabled`), `MissionOptionsSheet.tsx` (renommage
+  `SettingsModal.tsx`, + Play/Pause/Stop migrés). (6) `MissionPage.tsx` recomposé.
+- **Fichiers touchés** : voir `file-index.md` (à mettre à jour en fin de tâche).
+- **Risques** : token Mapbox absent/invalide (ne jamais planter — `isMapboxConfigured`
+  + try/catch) ; `heading===null` (stationnaire/premier fix, ne jamais figer la
+  flèche) ; pas de GPS encore acquis (fit-bounds fallback) ; mission sans stops
+  (défensif) ; `routeName`/`equipmentName` null (FK nullable, jamais afficher "null") ;
+  carte dans un conteneur flex (pas plein écran) → `ResizeObserver`/`resize()`
+  vigilant ; conflit scroll page vs pan carte à valider sur appareil réel.
+- **Plan complet** : `/root/.claude/plans/sparkling-swinging-shannon.md`.
+- **Résultat** : `tsc -b` OK, `eslint` OK, `npm run build` OK. `@types/geojson` ajouté en
+  devDependency (nécessaire pour typer les objets passés à `addSource`, absent sinon car
+  reca-operator n'installe pas `@mapbox/mapbox-gl-draw` qui le fournit transitivement côté
+  reca-app). Deux ajustements en cours de route par rapport au plan initial : (1) le bouton
+  « Annonce vocale » du footer a été tranché comme un mute toggle (`setConfig({voiceEnabled:
+  !voiceEnabled})`) plutôt que « tester la voix », plus utile en conditions réelles ; (2) le
+  bouton icône de reprise sur les lignes « à reprendre »/« terminée » de la liste reste
+  décoratif (pas de flux de reprise manuelle dans le moteur — backlog, voir `tasks.md`).
+  **Non vérifié en direct dans un navigateur** : pas d'identifiants de test disponibles dans
+  cette session (`PREVIEW_BYPASS` supprimé, auth réelle requise) — à valider manuellement avec
+  le compte `operateur@groupereca.ca` (`?sim=1`) avant de considérer le rendu visuel définitif.
+
+---
+
 ## Actifs
 
 - (aucun pour l'instant)

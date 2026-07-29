@@ -1,16 +1,10 @@
 import { ChevronRight } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
 import { motion } from 'motion/react'
 import { STATUS_CONFIG } from '../domain/status'
 import { problemCodeLabel } from '../domain/problemCodes'
 import { formatDistance, formatEta, splitAddress } from '../domain/format'
 import { TONE_CLASSES } from './statusTone'
 import type { Stop } from '../domain/types'
-
-/** Rend une icône lucide reçue en prop (évite de « créer un composant » au render). */
-function StatusIcon({ icon: Icon, className }: { icon: LucideIcon; className: string }) {
-  return <Icon className={className} aria-hidden="true" />
-}
 
 export function StopRow({ stop }: { stop: Stop }) {
   const descriptor = STATUS_CONFIG[stop.status]
@@ -24,9 +18,9 @@ export function StopRow({ stop }: { stop: Stop }) {
       className={`flex items-center gap-3 rounded-card border p-3 ${tone.rowBorder} ${tone.rowBg}`}
     >
       <span
-        className={`flex size-11 shrink-0 items-center justify-center rounded-full ${tone.pill}`}
+        className={`flex size-11 shrink-0 items-center justify-center rounded-full text-body font-bold tabular-nums ${tone.pill} ${tone.pillIcon}`}
       >
-        <StatusIcon icon={descriptor.icon} className={`size-5 ${tone.pillIcon}`} />
+        {stop.ordre}
       </span>
 
       <div className="min-w-0 flex-1">

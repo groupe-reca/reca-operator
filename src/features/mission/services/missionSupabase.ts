@@ -25,6 +25,14 @@ const SELECT_WITH_CONTRACT = `
  * n'est rattaché à aucun employé ou n'a aucune mission active (→ écran « Aucune
  * mission assignée »).
  */
+type EmployeeRow = { id: string; prenom: string; nom: string }
+type MissionRow = {
+  id: string
+  numero: number
+  route: { nom: string } | null
+  equipment: { nom: string } | null
+}
+
 export async function loadAssignedMission(): Promise<Mission | null> {
   const { data: userData, error: userError } = await supabase.auth.getUser()
   if (userError || !userData.user) return null
@@ -32,24 +40,24 @@ export async function loadAssignedMission(): Promise<Mission | null> {
   // 1. Employé rattaché à cet utilisateur.
   const { data: employee, error: employeeError } = await supabase
     .from('employees')
-    .select('id')
+    .select('id, prenom, nom')
     .eq('user_id', userData.user.id)
     .is('deleted_at', null)
-    .maybeSingle<{ id: string }>()
+    .maybeSingle<EmployeeRow>()
   if (employeeError) throw employeeError
   if (!employee) return null
 
-  // 2. Mission active assignée à cet employé.
+  // 2. Mission active assignée à cet employé (route + équipement joints pour l'en-tête).
   const { data: mission, error: missionError } = await supabase
     .from('missions')
-    .select('id, numero')
+    .select('id, numero, route:routes(nom), equipment:equipments(nom)')
     .eq('operator_id', employee.id)
     .is('deleted_at', null)
     .in('statut', ['planifiee', 'en_cours'])
     .order('date', { ascending: true })
     .order('heure_prevue', { ascending: true })
     .limit(1)
-    .maybeSingle<{ id: string; numero: number }>()
+    .maybeSingle<MissionRow>()
   if (missionError) throw missionError
   if (!mission) return null
 
@@ -69,7 +77,9 @@ export async function loadAssignedMission(): Promise<Mission | null> {
   return {
     id: mission.id,
     nom: `Mission #${mission.numero}`,
-    secteur: '',
+    routeName: mission.route?.nom ?? null,
+    operatorName: `${employee.prenom} ${employee.nom.charAt(0)}.`,
+    equipmentName: mission.equipment?.nom ?? null,
     stops,
   }
 }
