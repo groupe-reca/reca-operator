@@ -6,6 +6,8 @@ type UseMapboxMapOptions = {
   center: [number, number]
   zoom?: number
   style?: string
+  pitch?: number
+  bearing?: number
 }
 
 /**
@@ -35,6 +37,8 @@ export function useMapboxMap(containerRef: React.RefObject<HTMLDivElement | null
         style: options.style ?? 'mapbox://styles/mapbox/dark-v11',
         center: options.center,
         zoom: options.zoom ?? 14,
+        pitch: options.pitch ?? 0,
+        bearing: options.bearing ?? 0,
       })
     } catch (err) {
       const message = err instanceof Error ? err.message : "Impossible d'initialiser la carte Mapbox."

@@ -3,11 +3,13 @@ import mapboxgl from 'mapbox-gl'
 import type { Map as MapboxMap } from 'mapbox-gl'
 import { MapCanvas } from '@/components/map/MapCanvas'
 import { STATUS_CONFIG } from '../../domain/status'
+import { haversineMeters } from '../../domain/geo'
 import type { GpsPosition, Stop } from '../../domain/types'
 import { TONE_HEX } from './statusToneColors'
 import { boundsFromPoints } from './mapBounds'
 import { CompassBadge } from './CompassBadge'
 import { MapControls } from './MapControls'
+import { FOLLOW_EASE_MS, FOLLOW_MIN_MOVE_METERS, FOLLOW_PITCH, FOLLOW_ZOOM } from './mapCameraConfig'
 
 const ROUTE_SOURCE_ID = 'mission-route'
 const ROUTE_LAYER_ID = 'mission-route-line'
@@ -121,6 +123,9 @@ export function MissionMap({ stops, activeOrdre, position, className }: MissionM
   }, [stops])
   const stopMarkersRef = useRef<mapboxgl.Marker[]>([])
   const positionMarkerRef = useRef<mapboxgl.Marker | null>(null)
+  const lastFollowedRef = useRef<GpsPosition | null>(null)
+  const lastBearingRef = useRef(0)
+  const [heading, setHeading] = useState<number | null>(null)
 
   // Clés stables : `distanceMeters`/`etaMinutes` changent à chaque fix GPS, mais
   // ni le tracé ni les marqueurs n'ont besoin d'être reconstruits pour autant —
@@ -178,7 +183,11 @@ export function MissionMap({ stops, activeOrdre, position, className }: MissionM
     }
 
     if (!positionMarkerRef.current) {
-      positionMarkerRef.current = new mapboxgl.Marker({ element: createPositionMarkerElement() }).addTo(map)
+      // `setLngLat` AVANT `addTo` : Mapbox GL projette le marqueur dès son ajout
+      // à la carte et lève sinon `Cannot read properties of undefined (reading 'lng')`.
+      positionMarkerRef.current = new mapboxgl.Marker({ element: createPositionMarkerElement() })
+        .setLngLat([position.lng, position.lat])
+        .addTo(map)
     }
 
     const marker = positionMarkerRef.current
@@ -202,14 +211,45 @@ export function MissionMap({ stops, activeOrdre, position, className }: MissionM
     }
   }, [])
 
+  // Caméra « conduite » : suit la position et le cap en continu (Tesla/Waze/GPS
+  // agricole). Le cap est conservé (`lastBearingRef`) tant qu'aucun nouveau cap
+  // fiable n'est reçu (immobile) plutôt que de revenir plein nord. Un seuil de
+  // déplacement minimal évite un tremblement de caméra quand le GPS bruite à
+  // l'arrêt (`FOLLOW_MIN_MOVE_METERS`).
+  useEffect(() => {
+    if (!map || !position) return
+    const last = lastFollowedRef.current
+    if (last && haversineMeters(last, position) < FOLLOW_MIN_MOVE_METERS) return
+    lastFollowedRef.current = position
+
+    const bearing = position.heading ?? lastBearingRef.current
+    lastBearingRef.current = bearing
+    setHeading(bearing)
+
+    map.easeTo({
+      center: [position.lng, position.lat],
+      bearing,
+      pitch: FOLLOW_PITCH,
+      zoom: FOLLOW_ZOOM,
+      duration: FOLLOW_EASE_MS,
+    })
+  }, [map, position])
+
   const handleRecenter = () => {
     if (!map) return
     if (position) {
-      map.flyTo({ center: [position.lng, position.lat], zoom: 16 })
+      lastFollowedRef.current = null // force une reprise du suivi au prochain fix
+      map.easeTo({
+        center: [position.lng, position.lat],
+        bearing: lastBearingRef.current,
+        pitch: FOLLOW_PITCH,
+        zoom: FOLLOW_ZOOM,
+        duration: FOLLOW_EASE_MS,
+      })
       return
     }
     const bounds = boundsFromPoints(stops.map((s) => [s.lng, s.lat] as [number, number]))
-    if (bounds) map.fitBounds(bounds, { padding: 60, maxZoom: 15, duration: 0 })
+    if (bounds) map.fitBounds(bounds, { padding: 60, maxZoom: 15, duration: 0, pitch: 0, bearing: 0 })
   }
 
   const handleToggleLayer = () => {
@@ -226,9 +266,23 @@ export function MissionMap({ stops, activeOrdre, position, className }: MissionM
       : DEFAULT_CENTER
 
   return (
-    <div className={`relative overflow-hidden ${className ?? ''}`}>
-      <MapCanvas center={initialCenter} zoom={15} style={STYLE_DARK} className="size-full" onMapReady={setMap} />
-      <CompassBadge />
+    // `position` (relative/absolute/fixed) doit venir entièrement de `className` (l'appelant) :
+    // le fait de figer `relative` ici en plus d'un `absolute` passé par le parent faisait
+    // gagner `relative` dans le CSS généré par Tailwind (déclaré après `.absolute`, même
+    // spécificité), donc `inset-0` n'avait plus d'effet de dimensionnement — la carte
+    // s'effondrait à la hauteur de son contenu (~28px, l'attribution Mapbox) au lieu de
+    // remplir l'écran. `absolute`/`fixed`/`relative` fournissent tous un contexte de
+    // positionnement valide pour `CompassBadge`/`MapControls` (enfants `absolute`).
+    <div className={`overflow-hidden ${className ?? ''}`}>
+      <MapCanvas
+        center={initialCenter}
+        zoom={FOLLOW_ZOOM}
+        pitch={FOLLOW_PITCH}
+        style={STYLE_DARK}
+        className="size-full"
+        onMapReady={setMap}
+      />
+      <CompassBadge headingDeg={heading} />
       <MapControls onRecenter={handleRecenter} onToggleLayer={handleToggleLayer} isSatellite={isSatellite} />
     </div>
   )

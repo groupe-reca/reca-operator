@@ -76,34 +76,52 @@
     `STOP_FINALIZED` → `persistItemStatus` ; expose `connectionLost` (bannière « Connexion perdue »).
     2026-07-25 — accepte aussi `missionId`, route `MISSION_STARTED` → `startMission` (démarrage
     réel de la Mission, fresh start uniquement, idempotent).
-- **components** (présentationnels) : `components/MissionHeaderBar.tsx` (2026-07-29, nouveau —
-  logo + Mission/Route + opérateur/équipement + `SmartCounter` en pastille compacte),
-  `components/SmartCounter.tsx` (2026-07-29 — gagne `variant?: 'hero' | 'pill'`, même logique
-  d'affichage restylée), `components/CurrentMissionCard.tsx` (« Prochaine résidence » ; 2026-07-29 —
-  deux colonnes avec panneau ATTENTION à droite quand `attention.length > 0`, sinon pleine largeur),
-  `components/MissionCountersRow.tsx` (2026-07-29, nouveau — à faire/terminées/à reprendre +
-  barre de progression), `components/StopListHeader.tsx`, `components/StopList.tsx`,
-  `components/StopRow.tsx` (2026-07-29 — badge numéroté (`stop.ordre`) coloré par tone au lieu
-  de l'icône seule), `components/ProblemModal.tsx` (8 codes), `components/MissionOptionsSheet.tsx`
-  (2026-07-29, renommage de `SettingsModal.tsx` — réglage runtime de tous les paramètres — tache5 —
-  **+ Play/Pause/Stop migrés depuis `DevControlBar`**, point d'entrée **production**, plus de
-  gating dev), `components/MissionFooter.tsx` (2026-07-29, nouveau, remplace `DevControlBar.tsx`
-  supprimé — Problème / Annonce vocale (mute toggle `voiceEnabled`) / Plus d'options, toujours
-  visible), `components/statusTone.ts` (tone → classes Tailwind).
-  - `components/map/` (2026-07-29, nouveau — module carte Mapbox, seul endroit du module Mission
-    qui connaît `mapbox-gl`) : `MissionMap.tsx` (composant feature : tracé GeoJSON de la route,
+- **components** (présentationnels) : `components/MissionTopOverlay.tsx` (2026-07-29 tache6,
+  **remplace `MissionHeaderBar.tsx`** — bandeau flottant, plus de bande pleine largeur : bloc
+  glass Mission/Route/opérateur/équipement à gauche, `SmartCounter` (`variant="floating"`) isolé
+  à droite + petite bascule vocale séparée), `components/SmartCounter.tsx` (gagne
+  `variant?: 'hero' | 'pill' | 'floating'` — `floating` = gros compteur glassmorphism flottant),
+  `components/CurrentMissionCard.tsx` (« Prochaine résidence » ; deux colonnes si ATTENTION ;
+  2026-07-29 tache6 — restylée glassmorphism `bg-surface-card/75 backdrop-blur-md` + poignée de
+  drag décorative), `components/StopListDrawer.tsx` (2026-07-29 tache6, **nouveau, remplace
+  `StopListHeader.tsx` + `MissionCountersRow.tsx`** dans le flux — tiroir rétractable, replié =
+  3 résidences visibles max, dépliable par tap ou glissement (`motion` `drag="y"`) sur la
+  poignée, header compact avec compteurs terminées/à reprendre inline), `components/StopList.tsx`,
+  `components/StopRow.tsx` (badge numéroté (`stop.ordre`) coloré par tone), `components/
+  ProblemModal.tsx` (8 codes), `components/MissionOptionsSheet.tsx` (réglage runtime de tous les
+  paramètres — tache5 ; 2026-07-29 tache6 — la section « Contrôle manuel » (Play/Pause/Stop) est
+  de nouveau **gardée par `config.devControls`** — menu de développement cachée en prod, cf.
+  `design3.txt`), `components/MapFloatingButtons.tsx` (2026-07-29 tache6, **nouveau, remplace
+  `MissionFooter.tsx`** — 3 gros boutons ronds flottants sur le bord droit de la carte :
+  Navigation (lien Google Maps externe vers le stop actif) / Problème / Options),
+  `components/DevPanelTrigger.tsx` (2026-07-29 tache6, ajouté après coup — petit bouton discret
+  en haut-gauche, rendu **uniquement si `config.devControls`**, ouvre `MissionOptionsSheet` ;
+  sans lui, plus rien ne permettait d'atteindre le panneau Play/Pause/Stop une fois celui-ci
+  retiré de l'écran principal — le bouton « Options » des 3 flottants ouvre le même sheet mais
+  ne le met pas en avant), `components/statusTone.ts` (tone → classes Tailwind).
+  - `components/map/` (module carte Mapbox, seul endroit du module Mission qui connaît
+    `mapbox-gl`) : `MissionMap.tsx` (2026-07-29 tache6 — **plein écran** (`absolute inset-0`,
+    plus de conteneur/marge), caméra « conduite » qui suit la position **et le cap** en continu
+    (`map.easeTo`, pitch/zoom fixes `FOLLOW_PITCH`/`FOLLOW_ZOOM`), tracé GeoJSON de la route,
     marqueurs custom colorés par statut, marqueur position + halo + flèche de cap masquée si
-    `heading===null`, recentrer, bascule sombre/satellite via `map.setStyle`), `statusToneColors.ts`
-    (`TONE_HEX`, équivalent hex de `StatusTone` pour les marqueurs), `mapBounds.ts`
-    (`boundsFromPoints`, pur), `CompassBadge.tsx` (badge « N » statique, la carte ne tourne
-    jamais), `MapControls.tsx` (boutons flottants recentrer/calque).
-- **pages** : `pages/MissionPage.tsx` (layout plein écran : `MissionHeaderBar` → `MissionMap` →
-  bannière connexion perdue → `CurrentMissionCard`/`EmptyHero` → `MissionCountersRow` →
-  `StopListHeader`/`StopList` → `MissionFooter` toujours rendu ; `ProblemModal` +
-  `MissionOptionsSheet` montés en permanence ; branche `useMissionSync`)
+    `heading===null`, recentrer (relance le suivi), bascule sombre/satellite via `map.setStyle`),
+    `mapCameraConfig.ts` (2026-07-29 tache6, nouveau — constantes caméra UI pures : `FOLLOW_PITCH`
+    58°, `FOLLOW_ZOOM` 18.5, `FOLLOW_EASE_MS`, `FOLLOW_MIN_MOVE_METERS`), `statusToneColors.ts`
+    (`TONE_HEX`), `mapBounds.ts` (`boundsFromPoints`, pur), `CompassBadge.tsx` (2026-07-29 tache6 —
+    l'aiguille tourne maintenant à l'**inverse** du cap appliqué à la caméra (`headingDeg` prop)
+    pour continuer à pointer le vrai nord, la carte tournant désormais avec le cap — ce n'est PAS
+    la boussole du téléphone, qui reste hors scope), `MapControls.tsx` (boutons flottants
+    recentrer/calque, repositionnés sous `MissionTopOverlay`).
+- **pages** : `pages/MissionPage.tsx` (2026-07-29 tache6, **recomposé en overlay plein écran** —
+  `MissionMap` en fond (`absolute inset-0`) ; `MissionTopOverlay` + `MapFloatingButtons` +
+  pile flottante du bas (bannière connexion perdue → `CurrentMissionCard`/`EmptyHero` →
+  `StopListDrawer`) en `absolute` par-dessus ; plus de scroll de page (`<main>` supprimé) ;
+  `ProblemModal`/`MissionOptionsSheet` montés en permanence ; branche `useMissionSync`)
 - **Supprimés au Sprint 003** : `MissionHeader.tsx`, `MissionCard.tsx`, `MissionFooter.tsx` (v1),
-  `TransportControls.tsx`. **Supprimé 2026-07-29** : `DevControlBar.tsx` (Play/Pause/Stop migrés
-  dans `MissionOptionsSheet.tsx`, Problème migré dans le nouveau `MissionFooter.tsx`).
+  `TransportControls.tsx`. **Supprimé 2026-07-29 (tache4)** : `DevControlBar.tsx`. **Supprimés
+  2026-07-29 (tache6, refonte carte plein écran)** : `MissionHeaderBar.tsx` (→
+  `MissionTopOverlay.tsx`), `MissionFooter.tsx` (→ `MapFloatingButtons.tsx`),
+  `StopListHeader.tsx` + `MissionCountersRow.tsx` (→ `StopListDrawer.tsx`).
 
 ## Module transverse : Carte (`src/lib/mapboxClient.ts`, `src/hooks/useMapboxMap.ts`,
 `src/components/map/MapCanvas.tsx`) — 2026-07-29
@@ -114,10 +132,12 @@
 - `lib/mapboxClient.ts` — `MAPBOX_TOKEN`/`isMapboxConfigured` (`VITE_MAPBOX_TOKEN`).
 - `hooks/useMapboxMap.ts` — instancie `mapboxgl.Map` (style par défaut
   `mapbox://styles/mapbox/dark-v11`), try/catch autour du constructeur (token invalide → erreur
-  capturée, jamais un crash), `ResizeObserver`/`instance.resize()` (conteneur à hauteur flexible,
-  pas plein écran).
+  capturée, jamais un crash), `ResizeObserver`/`instance.resize()` (conteneur à hauteur flexible).
+  2026-07-29 (tache6) — accepte aussi `pitch`/`bearing` initiaux (générique, pour les cartes
+  « caméra inclinée » type conduite).
 - `components/map/MapCanvas.tsx` — wrapper présentationnel : repli « Carte non disponible » si pas
-  de token, repli erreur, sinon rend le conteneur et appelle `onMapReady(map)`.
+  de token, repli erreur, sinon rend le conteneur et appelle `onMapReady(map)`. Réexpose aussi
+  `pitch`/`bearing` (2026-07-29 tache6).
 - Dépendances : `mapbox-gl@^3.26.0` (+ `@types/geojson` en devDependency, nécessaire pour typer
   les objets GeoJSON passés à `addSource` sans dépendre de `@mapbox/mapbox-gl-draw`).
 

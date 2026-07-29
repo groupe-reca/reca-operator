@@ -168,16 +168,18 @@ export function MissionOptionsSheet({
               </button>
             </div>
 
-            <div className="mb-4">
-              <h3 className="mb-2 px-1 text-label font-semibold uppercase tracking-wide text-text-muted">
-                Contrôle manuel
-              </h3>
-              <div className="flex gap-2">
-                <PhaseButton icon={Play} label="Play" colorClass="bg-status-success" active={phase === 'RUNNING'} onClick={onPlay} />
-                <PhaseButton icon={Pause} label="Pause" colorClass="bg-status-warning" active={phase === 'PAUSED'} onClick={onPause} />
-                <PhaseButton icon={Square} label="Stop" colorClass="bg-status-danger" active={phase === 'STOPPED'} onClick={onStop} />
+            {config.devControls && (
+              <div className="mb-4">
+                <h3 className="mb-2 px-1 text-label font-semibold uppercase tracking-wide text-text-muted">
+                  Contrôle manuel (développement)
+                </h3>
+                <div className="flex gap-2">
+                  <PhaseButton icon={Play} label="Play" colorClass="bg-status-success" active={phase === 'RUNNING'} onClick={onPlay} />
+                  <PhaseButton icon={Pause} label="Pause" colorClass="bg-status-warning" active={phase === 'PAUSED'} onClick={onPause} />
+                  <PhaseButton icon={Square} label="Stop" colorClass="bg-status-danger" active={phase === 'STOPPED'} onClick={onStop} />
+                </div>
               </div>
-            </div>
+            )}
 
             <p className="mb-4 text-label text-text-faint">
               Réglage en direct — les changements s'appliquent immédiatement. Non persistant :

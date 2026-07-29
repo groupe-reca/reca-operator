@@ -70,6 +70,9 @@ export async function loadAssignedMission(): Promise<Mission | null> {
     .order('created_at', { ascending: true })
   if (itemsError) throw itemsError
 
+  // Un stop sans coordonnées (contrat non joint ou non géocodé) est écarté : la
+  // machine à états est pilotée par le GPS, elle ne pourrait jamais le faire
+  // avancer et il bloquerait la tournée en restant le prochain dans l'ordre.
   const stops = ((items ?? []) as unknown as MissionItemJoinRow[])
     .map(mapItemToStop)
     .filter((stop) => Number.isFinite(stop.lat) && Number.isFinite(stop.lng))

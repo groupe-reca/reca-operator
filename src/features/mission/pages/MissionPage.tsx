@@ -1,12 +1,11 @@
 import { useState } from 'react'
 import { Loader2, RefreshCw, TriangleAlert, WifiOff } from 'lucide-react'
-import { MissionHeaderBar } from '../components/MissionHeaderBar'
+import { MissionTopOverlay } from '../components/MissionTopOverlay'
+import { MapFloatingButtons } from '../components/MapFloatingButtons'
+import { DevPanelTrigger } from '../components/DevPanelTrigger'
 import { MissionMap } from '../components/map/MissionMap'
 import { CurrentMissionCard } from '../components/CurrentMissionCard'
-import { MissionCountersRow } from '../components/MissionCountersRow'
-import { StopListHeader } from '../components/StopListHeader'
-import { StopList } from '../components/StopList'
-import { MissionFooter } from '../components/MissionFooter'
+import { StopListDrawer } from '../components/StopListDrawer'
 import { ProblemModal } from '../components/ProblemModal'
 import { MissionOptionsSheet } from '../components/MissionOptionsSheet'
 import { Button } from '@/components/ui/Button'
@@ -43,84 +42,81 @@ export function MissionPage() {
   }
 
   const reportedCount = snapshot.allStops.filter((s) => s.status === 'NON_TERMINE').length
-  const todoCount = Math.max(0, snapshot.totalCount - snapshot.completedCount - reportedCount)
+  const activeStop = snapshot.activeMission?.stop ?? null
+  const navigationHref = activeStop ? `https://maps.google.com/?q=${activeStop.lat},${activeStop.lng}` : null
 
   return (
-    <div className="flex h-[100svh] flex-col bg-surface-bg">
-      <MissionHeaderBar
+    <div className="relative h-[100svh] w-screen overflow-hidden bg-surface-bg">
+      {/* Carte plein écran — élément central de l'interface (cf. design3.txt). */}
+      <MissionMap
+        stops={snapshot.allStops}
+        activeOrdre={activeStop?.ordre ?? null}
+        position={snapshot.position}
+        className="absolute inset-0"
+      />
+
+      <MissionTopOverlay
         missionLabel={engine.missionLabel}
         routeName={engine.routeName}
         operatorName={engine.operatorName}
         equipmentName={engine.equipmentName}
         counter={snapshot.counter}
+        voiceEnabled={snapshot.config.voiceEnabled}
+        onToggleVoice={() => engine.setConfig({ voiceEnabled: !snapshot.config.voiceEnabled })}
       />
 
-      {/* Carte de la mission : tracé, marqueurs par statut, position + cap. */}
-      <MissionMap
-        stops={snapshot.allStops}
-        activeOrdre={snapshot.activeMission?.stop.ordre ?? null}
-        position={snapshot.position}
-        className="mx-4 mb-3 h-[32svh] shrink-0 rounded-card"
+      <MapFloatingButtons
+        navigationHref={navigationHref}
+        canReportProblem={snapshot.activeMission !== null}
+        onProblem={() => setProblemOpen(true)}
+        onOptions={() => setOptionsOpen(true)}
       />
 
-      {/* Bannière : perte de connexion (session conservée, reconnexion en cours). */}
-      {sync.connectionLost && (
-        <div className="mx-4 mb-2 flex items-center gap-2 rounded-control border border-status-warning/30 bg-status-warning/10 px-3 py-2 text-label text-status-warning">
-          <WifiOff className="size-3.5 shrink-0" aria-hidden="true" />
-          Connexion perdue. Tentative de reconnexion…
-        </div>
-      )}
+      {/* Déclencheur du panneau de développement (Play/Pause/Stop) — disparaît
+          si `devControls` est désactivé (vrai déploiement terrain). */}
+      {snapshot.config.devControls && <DevPanelTrigger onOpen={() => setOptionsOpen(true)} />}
 
-      {/* Contenu défilable */}
-      <main className="flex-1 overflow-y-auto px-4 pb-3">
+      {/* Pile flottante du bas : bannière connexion, carte « prochaine résidence », tiroir résidences. */}
+      <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col gap-2 px-4 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
+        {sync.connectionLost && (
+          <div className="flex items-center gap-2 rounded-control border border-status-warning/30 bg-status-warning/20 px-3 py-2 text-label text-status-warning backdrop-blur-md">
+            <WifiOff className="size-3.5 shrink-0" aria-hidden="true" />
+            Connexion perdue. Tentative de reconnexion…
+          </div>
+        )}
+
+        {engine.gpsError && running && (
+          <p className="flex items-center gap-1.5 rounded-control bg-surface-card/70 px-3 py-1.5 text-label text-status-warning backdrop-blur-md">
+            <TriangleAlert className="size-3.5 shrink-0" aria-hidden="true" />
+            {engine.gpsError}
+          </p>
+        )}
+
         {engine.isLoading ? (
-          <div className="flex h-40 items-center justify-center">
+          <div className="flex h-32 items-center justify-center rounded-card border border-white/10 bg-surface-card/75 backdrop-blur-md">
             <Loader2 className="size-6 animate-spin text-text-muted" aria-hidden="true" />
           </div>
         ) : engine.error ? (
-          <p className="mt-6 flex items-center justify-center gap-2 text-body text-status-danger">
+          <p className="flex items-center justify-center gap-2 rounded-card border border-white/10 bg-surface-card/75 p-4 text-body text-status-danger backdrop-blur-md">
             <TriangleAlert className="size-4" aria-hidden="true" />
             Impossible de charger la tournée.
           </p>
         ) : (
-          <div className="flex flex-col gap-3">
+          <>
             {snapshot.activeMission ? (
               <CurrentMissionCard mission={snapshot.activeMission} />
             ) : (
               <EmptyHero running={running} allDone={snapshot.otherStops.length === 0} />
             )}
 
-            {engine.gpsError && running && (
-              <p className="flex items-center gap-1.5 px-1 text-label text-status-warning">
-                <TriangleAlert className="size-3.5 shrink-0" aria-hidden="true" />
-                {engine.gpsError}
-              </p>
-            )}
-
-            <MissionCountersRow
-              todoCount={todoCount}
+            <StopListDrawer
+              stops={snapshot.otherStops}
               completedCount={snapshot.completedCount}
               reportedCount={reportedCount}
-              totalCount={snapshot.totalCount}
             />
-
-            {snapshot.otherStops.length > 0 && (
-              <>
-                <StopListHeader />
-                <StopList stops={snapshot.otherStops} />
-              </>
-            )}
-          </div>
+          </>
         )}
-      </main>
-
-      <MissionFooter
-        canReportProblem={snapshot.activeMission !== null}
-        onProblem={() => setProblemOpen(true)}
-        voiceEnabled={snapshot.config.voiceEnabled}
-        onToggleVoice={() => engine.setConfig({ voiceEnabled: !snapshot.config.voiceEnabled })}
-        onMoreOptions={() => setOptionsOpen(true)}
-      />
+      </div>
 
       <ProblemModal
         open={problemOpen}
@@ -180,7 +176,7 @@ function EmptyHero({ running, allDone }: { running: boolean; allDone: boolean })
       : 'Appuyez sur Play pour démarrer la tournée.'
 
   return (
-    <section className="flex h-40 items-center justify-center rounded-card border border-border-subtle bg-surface-card p-6 text-center">
+    <section className="flex h-32 items-center justify-center rounded-card border border-white/10 bg-surface-card/75 p-6 text-center shadow-lg shadow-black/40 backdrop-blur-md">
       <p className="text-body text-text-muted">{message}</p>
     </section>
   )

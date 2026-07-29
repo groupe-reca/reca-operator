@@ -169,6 +169,102 @@
   supprimé, auth réelle requise) : à valider manuellement avec le compte `operateur@groupereca.ca`
   (`?sim=1` pour piloter le GPS) avant de considérer le rendu visuel définitif.
 
+- [x] **Correctif — crash au Play : marqueur de position Mapbox sans coordonnées (2026-07-29)**
+  Premier test réel sur téléphone (`operateur.signaweb.ca`) : appuyer sur Play affichait l'écran
+  d'erreur react-router « Cannot read properties of undefined (reading 'lng') ». Cause :
+  `MissionMap.tsx` appelait `.addTo(map)` avant `.setLngLat()` sur le marqueur de position — Mapbox GL
+  projette le marqueur dès l'ajout et lit `_lngLat.lng` encore `undefined`. Corrigé en chaînant
+  `setLngLat` avant `addTo` (comme le faisaient déjà les marqueurs de stops). Le crash n'apparaissait
+  qu'au Play car `position` reste `null` tant qu'aucun fix GPS n'a été émis. `tsc -b`, `npm run lint`,
+  `npm run build` propres (`dist/` reconstruit pour PM2).
+
+- [x] **Correctif — contrat non géocodé placé à (0, 0) (2026-07-29)**
+  Repéré en corrigeant le crash au Play. `mapItemToStop` faisait `Number(contract?.latitude)` :
+  `Number(null)` === `0` (fini), donc le filtre de `loadAssignedMission` n'écartait que les items
+  sans contrat joint (`undefined` → `NaN`), pas ceux dont le contrat existe sans coordonnées. Un tel
+  stop atterrissait au large de l'Afrique et, l'ordonnancement suivant `ordre`, devenait le prochain
+  stop engagé que le GPS ne pouvait jamais atteindre — tournée bloquée jusqu'à un « Problème »
+  manuel. Corrigé par un helper `toCoordinate()` dans `missionMapping.ts` (`null`/`undefined` →
+  `NaN`) + commentaire explicatif sur le filtre de `missionSupabase.ts`. Aucun `console.warn` ajouté
+  (aucun `console.*` dans `src/`, convention respectée). Vérifié : test headless (tsx) — 3 lignes
+  (coords valides / `null` / contrat absent) → seule la 1re est gardée ; `tsc -b`, `npm run lint`,
+  `npm run build` propres.
+
+- [x] **tache6 — Refonte carte plein écran « système embarqué tracteur » (2026-07-29)**
+  (`.input/design3.png`/`.txt`) : l'écran Mission ne ressemble plus à une app de gestion — la
+  carte Mapbox occupe tout l'écran (aucun conteneur/marge), caméra inclinée (pitch 58°) et zoomée
+  (18.5) qui suit le GPS **et le cap de déplacement** en continu (`map.easeTo`, constantes dans
+  nouveau `mapCameraConfig.ts`). Tous les autres éléments deviennent flottants (glassmorphism) :
+  `MissionTopOverlay.tsx` (remplace `MissionHeaderBar.tsx` — bandeau flottant, compteur
+  `SmartCounter variant="floating"` isolé en haut-droite), `MapFloatingButtons.tsx` (remplace
+  `MissionFooter.tsx` — 3 gros boutons ronds à droite : Navigation/Problème/Options),
+  `StopListDrawer.tsx` (remplace `StopListHeader.tsx`+`MissionCountersRow.tsx` — tiroir
+  rétractable, 3 résidences visibles repliées, dépliable par tap/glissement). `CurrentMissionCard`
+  restylée glass + poignée décorative. `CompassBadge` tourne à l'inverse du cap (la carte tourne
+  désormais, avant elle ne tournait jamais). Section « Contrôle manuel » de
+  `MissionOptionsSheet` de nouveau gardée par `config.devControls` (menu dev caché, comme demandé
+  par le texte — réintroduit après avoir été retiré en tache4). `MissionPage.tsx` recomposé en
+  overlay plein écran (plus de `<main>` scrollable). Zéro changement de logique métier/GPS/statuts/
+  Supabase (règle du texte respectée). Vérifié : `tsc -b` OK, `eslint` OK, `npm run build` OK.
+  **Non vérifié en direct dans un navigateur** (même limitation que tache4 — pas de compte de test
+  dans cette session) : à valider manuellement (fluidité caméra, geste du tiroir, lisibilité en
+  satellite) avec le compte `operateur@groupereca.ca` (`?sim=1`).
+
+- [x] **tache6 (suite) — bouton manquant pour révéler le panneau de développement (2026-07-29)**
+  Retour utilisateur juste après tache6 : gater « Contrôle manuel » (Play/Pause/Stop) derrière
+  `config.devControls` dans `MissionOptionsSheet` sans lui donner de point d'entrée dédié laissait
+  l'utilisateur sans bouton clairement identifié pour l'atteindre (le bouton « Options » des 3
+  flottants ouvre bien le même panneau, mais rien ne le signalait comme « panneau développement »).
+  Ajouté `components/DevPanelTrigger.tsx` — petit bouton discret en haut-gauche (sous la boussole,
+  symétrique de `MapControls` à droite), rendu **uniquement** si `snapshot.config.devControls` est
+  actif, ouvre `MissionOptionsSheet` (même sheet, section Contrôle manuel déjà gardée dessus).
+  Disparaît complètement si `devControls` est mis à `false` (vrai déploiement terrain), cohérent
+  avec « aucun bouton technique » du texte `design3.txt`. Vérifié : `tsc -b`/`eslint`/`npm run
+  build` propres.
+
+- [x] **tache6 (suite) — la carte ne s'affichait pas du tout (2026-07-29, corrigé + vérifié par Playwright)**
+  Signalé par l'utilisateur : « la carte ne s'affiche pas correctement ». Investigation avec
+  Playwright + Chromium headless installés pour l'occasion (voir « Outillage » ci-dessous) sur un
+  vrai compte (`operateur@groupereca.ca`) : le canevas Mapbox ne faisait que **28px de haut** au
+  lieu de remplir l'écran (fond quasi noir `bg-surface-bg` visible partout autour). Cause : dans
+  `MissionMap.tsx`, le wrapper racine codait en dur `relative overflow-hidden` puis concaténait le
+  `className` de l'appelant — qui depuis la refonte tache6 vaut `absolute inset-0`
+  (`MissionPage.tsx`). Résultat : l'élément porte à la fois `.relative` et `.absolute`, et dans le
+  CSS généré par Tailwind, `.relative{position:relative}` est déclaré **après** `.absolute{position:
+  absolute}` (même spécificité) → `.relative` gagnait toujours, `inset-0` n'avait alors plus aucun
+  effet de dimensionnement, et la carte s'effondrait à la hauteur de son seul contenu en flux
+  normal (l'attribution Mapbox, ~28px). **Corrigé** en retirant le `relative` codé en dur — le seul
+  appelant (`MissionPage`) fournit déjà son propre `absolute inset-0`, suffisant comme contexte de
+  positionnement pour `CompassBadge`/`MapControls`. **Second bug trouvé dans la foulée** (capture
+  d'écran après le premier correctif) : les 3 gros boutons flottants (`MapFloatingButtons`,
+  centrés verticalement) étaient **recouverts** par la pile de cartes du bas (même `z-20`, cette
+  dernière rendue après dans le JSX gagnait le conflit d'empilement) — « Options » disparaissait
+  entièrement dès que la carte + le tiroir devenaient assez hauts pour atteindre le milieu de
+  l'écran. Corrigé en faisant de tous les contrôles flottants persistants (`MissionTopOverlay`,
+  `MapFloatingButtons`, `DevPanelTrigger`, `MapControls`, `CompassBadge`) une couche **`z-30`**
+  au-dessus du contenu (`z-20`) — règle désormais : chrome flottant toujours au-dessus du contenu.
+  **Troisième ajustement** : `CompassBadge` (laissé à `left-3 top-3`) se retrouvait caché sous le
+  bloc Mission/Route du nouveau `MissionTopOverlay` (même coin) — déplacé sous l'en-tête
+  (`top-[calc(safe-area+108px)]`, aligné avec `MapControls` à droite), `DevPanelTrigger` descendu
+  d'un cran en dessous (`+152px`) pour laisser sa place, symétrique de la colonne
+  recentrer/calque à droite. Revérifié en direct (Playwright) : canevas 412×915 (plein écran),
+  tuiles/style/police chargés (200), tracé + marqueurs + halo + flèche de cap visibles, caméra qui
+  suit position+cap pendant `?sim=1` (captures à 00:10/00:19/00:21/00:25), tiroir dépliable, bascule
+  satellite — sans aucune erreur console/page. Vérifié aussi : `tsc -b`/`eslint`/`npm run build`
+  propres.
+  - **Outillage ajouté** : `playwright` en devDependency (+ Chromium téléchargé via
+    `npx playwright install --with-deps chromium`) pour pouvoir vérifier visuellement l'app sur ce
+    VPS sans GUI — contrairement à l'extension « Claude in Chrome » (qui exige un vrai navigateur
+    sur la même machine que la session Claude Code, donc inutilisable ici), Playwright pilote son
+    propre Chromium headless. **Piège rencontré** : `127.0.0.1:3030` semblait répondre (`curl` 200)
+    mais c'était en fait le build de **production PM2 déjà en place** (`pm2 list` → process
+    `reca-operator`, sert `dist/` sur 3030) — pas mon `npm run dev`, qui avait atterri sur le port
+    **3032** (3030/3031 déjà pris par d'autres process vite). Toujours vérifier `ss -ltnp`/`pm2 list`
+    avant de faire confiance à un port par défaut sur ce VPS partagé. **Non fait** : rebuild +
+    redémarrage du process PM2 de prod avec le correctif (`dist/` encore sur l'ancienne version) —
+    à faire seulement après accord explicite de l'utilisateur (service potentiellement utilisé en
+    direct par un opérateur).
+
 ## Abandonnées / en suspens
 
 - (aucune)

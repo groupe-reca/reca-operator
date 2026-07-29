@@ -254,6 +254,73 @@
 
 ---
 
+### tache6 — Refonte carte plein écran « système embarqué tracteur » (`.input/design3.png`/`.txt`) ✅
+
+- **Objectif** : transformer l'écran Mission en interface immersive façon GPS
+  embarqué (Tesla/Apple Plans/Waze/GPS agricole John Deere) : la carte Mapbox
+  devient l'élément unique et permanent, plein écran, caméra inclinée (pitch
+  55-60°) et zoomée (18-19), qui suit le GPS et s'oriente selon le cap réel
+  (`position.heading`, déjà capté — PAS la boussole du téléphone, hors scope).
+  Tous les autres éléments deviennent des cartes/boutons flottants par-dessus.
+  Aucun changement de logique métier/GPS/statuts/Supabase — purement présentation.
+- **Décisions de portée** (pour lever les ambiguïtés du texte) :
+  - Le compteur (haut-droite, très gros, coloré par état) reste isolé ; le
+    logo/mission/route restent en haut, mais discrets (petite ligne), pas collés
+    au compteur.
+  - Bascule vocale rapide : petite icône séparée en haut (pas un des 3 gros
+    boutons flottants, qui sont strictement Navigation/Problème/Options par
+    fidélité au texte).
+  - "Navigation" (bouton flottant) = ouvre l'itinéraire externe (Google Maps) du
+    stop actif, reprend le lien déjà présent dans `CurrentMissionCard`.
+  - "Options" (bouton flottant) ouvre `MissionOptionsSheet` inchangé, MAIS la
+    section « Contrôle manuel » (Play/Pause/Stop) redevient gardée par
+    `config.devControls` (comme avant tache4) — restaure le sens du "menu de
+    développement caché" demandé par le texte, sans toucher au flag lui-même.
+  - Drawer résidences : 2-3 lignes visibles par défaut, bouton/drag pour
+    déplier le reste (interaction tap sur la poignée + `drag="y"` motion,
+    pas de logique métier).
+  - `MissionCountersRow` (à faire/terminées/à reprendre + progression) n'a pas
+    d'équivalent dans le texte/l'image → fusionné dans l'en-tête du drawer
+    (compact) plutôt que supprimé (perte d'info sinon).
+- **Étapes** :
+  1. `src/hooks/useMapboxMap.ts` : accepter `pitch`/`bearing` initiaux (générique).
+  2. `features/mission/components/map/MissionMap.tsx` : plein écran (`absolute
+     inset-0`), caméra qui suit position+cap en continu (`map.easeTo`), constantes
+     caméra dans un nouveau `mapCameraConfig.ts` (UI pure, pas dans `domain/`).
+     `CompassBadge` tourne à l'inverse du cap pour rester correcte.
+  3. Nouveau `components/MissionTopOverlay.tsx` (remplace `MissionHeaderBar.tsx`) :
+     logo+mission/route discret en haut-gauche/centre, `SmartCounter` (nouveau
+     variant `floating`, gros) en haut-droite, petite bascule vocale à côté.
+  4. Nouveau `components/MapFloatingButtons.tsx` : 3 boutons ronds à droite
+     (Navigation/Problème/Options), remplace `MissionFooter.tsx` (supprimé).
+  5. `CurrentMissionCard.tsx` : restyle glassmorphism (fond translucide +
+     `backdrop-blur`), poignée de drag décorative en haut.
+  6. Nouveau `components/StopListDrawer.tsx` (remplace `StopListHeader.tsx` +
+     `MissionCountersRow.tsx` dans le flux, tous deux supprimés) : tiroir
+     rétractable (2-3 visibles / déplié = `StopList` complète), header compact
+     avec compteurs.
+  7. `MissionOptionsSheet.tsx` : gate `config.devControls` autour de la section
+     Contrôle manuel.
+  8. `pages/MissionPage.tsx` : recomposé - carte plein écran en fond,
+     tout le reste en `absolute`/overlay par-dessus, plus de scroll de page.
+  9. Mémoire : `file-index.md`/`memory.md`/`tasks.md` en fin de tâche.
+- **Fichiers touchés** : voir étapes ci-dessus + suppressions
+  (`MissionHeaderBar.tsx`, `MissionFooter.tsx`, `StopListHeader.tsx`,
+  `MissionCountersRow.tsx`).
+- **Risques** : `map.easeTo` trop fréquent (chaque fix GPS) → cadencer/adoucir
+  (duration courte, ne pas relancer si déplacement infime) pour éviter un
+  tremblement ; drag du tiroir sur mobile vs pan de la carte (le tiroir est
+  hors de la carte, en z-index supérieur, donc pas de conflit de geste) ;
+  `devControls` par défaut `true` (config.ts) → les boutons Play/Pause/Stop
+  restent visibles tant que ce flag n'est pas mis à `false` en prod, comportement
+  déjà existant, pas modifié ici. Non testable en direct dans cet environnement
+  (pas de compte/navigateur) → vérifier `tsc -b`/`eslint`/`build` seulement.
+- **Résultat** : `tsc -b` OK, `eslint` OK, `npm run build` OK. Détail complet et décisions
+  dans `memory/memory.md` (suivi 2026-07-29 « Refonte système embarqué tracteur »). Non
+  vérifié en direct dans un navigateur (pas de compte de test dans cette session).
+
+---
+
 ## Actifs
 
 - (aucun pour l'instant)

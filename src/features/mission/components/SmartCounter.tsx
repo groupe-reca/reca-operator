@@ -5,15 +5,16 @@ import type { CounterView } from '../engine/MissionEngine'
 
 type SmartCounterProps = {
   counter: CounterView
-  /** `hero` = gros chiffre plein écran ; `pill` = pastille compacte (en-tête). */
-  variant?: 'hero' | 'pill'
+  /** `hero` = gros chiffre plein écran ; `pill` = pastille compacte (en-tête
+   * historique) ; `floating` = gros compteur flottant par-dessus la carte. */
+  variant?: 'hero' | 'pill' | 'floating'
 }
 
 /**
  * Compteur intelligent : temps (MM:SS), icône + libellé de l'état courant, et la
  * cible du compte à rebours quand il y en a une. Change automatiquement selon
- * l'état. `variant="pill"` restyle le même contenu en pastille compacte pour
- * `MissionHeaderBar`, sans dupliquer la logique d'affichage.
+ * l'état. Les variants restylent le même contenu sans dupliquer la logique
+ * d'affichage.
  */
 export function SmartCounter({ counter, variant = 'hero' }: SmartCounterProps) {
   const descriptor = STATUS_CONFIG[counter.status]
@@ -32,6 +33,22 @@ export function SmartCounter({ counter, variant = 'hero' }: SmartCounterProps) {
         <span className={`text-label font-semibold tabular-nums ${tone.text}`}>
           {formatStopwatch(counter.elapsedMs)}
         </span>
+      </div>
+    )
+  }
+
+  if (variant === 'floating') {
+    return (
+      <div
+        className={`flex flex-col items-end rounded-card border border-white/10 bg-surface-card/70 px-4 py-2 shadow-lg shadow-black/40 backdrop-blur-md ${tone.text}`}
+      >
+        <p className="text-[32px] font-extrabold leading-none tabular-nums">
+          {formatStopwatch(counter.elapsedMs)}
+        </p>
+        <div className="mt-1 flex items-center gap-1.5">
+          <Icon className="size-3.5" aria-hidden="true" />
+          <span className="text-[11px] font-bold uppercase tracking-wide">{descriptor.label}</span>
+        </div>
       </div>
     )
   }

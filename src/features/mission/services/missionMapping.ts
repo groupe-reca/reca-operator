@@ -45,6 +45,19 @@ export function outcomeToStatut(outcome: 'TERMINE' | 'NON_TERMINE'): MissionItem
   return outcome === 'TERMINE' ? 'terminee' : 'a_reprendre'
 }
 
+/**
+ * Coordonnée du contrat → nombre exploitable, `NaN` si absente.
+ *
+ * ⚠️ Ne pas remplacer par un simple `Number(...)` : `Number(null)` vaut `0` (donc
+ * `Number.isFinite` le laisse passer), ce qui plaçait un contrat non géocodé au
+ * large de l'Afrique — le stop devenait alors le prochain de la tournée sans que
+ * le GPS puisse jamais l'atteindre. `NaN` le rend filtrable par l'appelant
+ * (`missionSupabase.loadAssignedMission`), au même titre qu'un contrat non joint.
+ */
+function toCoordinate(value: number | null | undefined): number {
+  return value == null ? Number.NaN : Number(value)
+}
+
 /** Convertit une ligne jointe en `Stop` interne (fonction pure, testable). */
 export function mapItemToStop(row: MissionItemJoinRow, index: number): Stop {
   const contract = row.contract
@@ -55,8 +68,8 @@ export function mapItemToStop(row: MissionItemJoinRow, index: number): Stop {
     // la séquence de la mission, pas la distance GPS).
     ordre: index + 1,
     adresse: contract?.adresse_geocodee ?? '',
-    lat: Number(contract?.latitude),
-    lng: Number(contract?.longitude),
+    lat: toCoordinate(contract?.latitude),
+    lng: toCoordinate(contract?.longitude),
     type: '',
     status: mapStatutToInternal(row.statut),
     operatorMessage: contract?.message_operateur ?? null,

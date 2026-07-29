@@ -21,7 +21,9 @@ export function CurrentMissionCard({ mission }: { mission: ActiveMissionView }) 
   const hasAttention = attention.length > 0
 
   return (
-    <section className="rounded-card border-l-4 border border-accent-border bg-surface-card p-4 shadow-lg shadow-black/20">
+    <section className="rounded-card border-l-4 border border-accent-border bg-surface-card/75 p-4 shadow-lg shadow-black/40 backdrop-blur-md">
+      <span className="mx-auto mb-2 block h-1 w-9 rounded-full bg-text-faint/50" aria-hidden="true" />
+
       <p className="text-label font-semibold uppercase tracking-wide text-accent-strong">
         Prochaine résidence
       </p>

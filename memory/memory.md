@@ -288,11 +288,110 @@
   `design2.png`, mais **aucune action n'y est câblée** — le moteur n'a pas de mécanisme de reprise
   manuelle d'un stop déjà finalisé (seul le GPS peut ré-engager un stop non final via `ordre`).
   Backlog séparé si le besoin se confirme.
+- 🐞 **Bug trouvé au 1er test réel sur téléphone (2026-07-29, corrigé)** : `TypeError: Cannot read
+  properties of undefined (reading 'lng')` (stack `addTo → _update → smartWrap`) au moment du Play,
+  écran d'erreur react-router plein écran. Cause : `MissionMap.tsx` créait le marqueur de position
+  avec `new mapboxgl.Marker({element}).addTo(map)` **puis** `setLngLat` — or Mapbox GL projette le
+  marqueur dès `addTo` et lit `this._lngLat.lng` (encore `undefined`). **Règle Mapbox GL à retenir :
+  toujours `setLngLat()` AVANT `addTo()`** (les marqueurs de stops, eux, chaînaient déjà dans le bon
+  ordre). Ne se déclenchait qu'au Play parce que `position` reste `null` tant que le GPS (réel ou
+  `?sim=1`, produit par le tick du moteur) n'a pas émis de fix — l'effet sortait avant de créer le
+  marqueur.
+- 🐞 **Contrat non géocodé placé à (0, 0) (2026-07-29, corrigé)** : `mapItemToStop` faisait
+  `Number(contract?.latitude)` — or **`Number(null)` vaut `0`** (et passe `Number.isFinite`), seul
+  `Number(undefined)` donne `NaN`. Le filtre de `loadAssignedMission` n'écartait donc que les items
+  **sans contrat joint**, pas ceux dont le contrat existe avec `latitude/longitude` à `null` : le
+  stop atterrissait au large de l'Afrique et, l'ordonnancement suivant `ordre`, **bloquait la
+  tournée** (prochain stop engagé que le GPS ne peut jamais atteindre ; seul le bouton Problème
+  débloquait). Corrigé par un helper `toCoordinate()` (`null`/`undefined` → `NaN`) qui rend ces
+  items filtrables comme les autres. **Décision maintenue** : un stop sans coordonnées est écarté
+  de la tournée (la machine à états est pilotée par le GPS) — il reste donc invisible pour
+  l'opérateur, et `ordre` (calculé avant le filtre) garde un trou dans la numérotation, ce qui
+  correspond au rang réel côté RECA App. Le vrai correctif de fond est côté **données** : géocoder
+  le contrat dans RECA App.
 - ⚠️ **Non vérifié en direct dans un navigateur** : `tsc -b`/`eslint`/`npm run build` sont propres,
   mais aucun test manuel avec un vrai compte (`operateur@groupereca.ca`) n'a été fait dans cette
   session (identifiants non disponibles, `PREVIEW_BYPASS` supprimé). À faire avant de considérer
   le rendu visuel définitif — en particulier le comportement tactile scroll-page vs pan-carte sur
   appareil réel, et la lisibilité du panneau ATTENTION à deux colonnes sur un petit écran.
+
+## Suivi (2026-07-29, suite) — Refonte « système embarqué tracteur » (tache6, `.input/design3.png`/`.txt`)
+
+- **Nouveau design de référence** : `.input/design3.png`/`.txt` — remplace `design2.png` comme
+  cible de l'écran Mission (la carte plein écran est désormais l'élément **unique et permanent**
+  de l'interface, tout le reste flotte par-dessus). `design.png` reste la référence du thème
+  sombre d'origine (tokens), `design2.png` documente l'étape intermédiaire (carte encadrée +
+  liste scrollable), **remplacée** par cette refonte — ne pas revenir à ce layout encadré.
+- **Caméra « conduite »** : `MissionMap.tsx` suit désormais la position GPS **et** le cap
+  (`position.heading`) en continu via `map.easeTo` (pitch fixe `FOLLOW_PITCH=58°`, zoom fixe
+  `FOLLOW_ZOOM=18.5`, constantes dans `components/map/mapCameraConfig.ts`, UI pure — pas dans
+  `domain/`). **Décision** : ce n'est **pas** la boussole du téléphone (capteur d'orientation),
+  qui reste hors scope (voir backlog `tasks.md`) — c'est le cap de déplacement déjà calculé pour
+  la voix (`Sprint 005`). Un seuil `FOLLOW_MIN_MOVE_METERS` évite le tremblement de caméra au GPS
+  bruité à l'arrêt. `CompassBadge` tourne maintenant à l'**inverse** du cap appliqué (props
+  `headingDeg`) pour continuer à pointer le vrai nord pendant que la carte tourne — avant cette
+  tâche le badge était statique car la carte ne tournait jamais.
+- **Interface = carte plein écran + éléments flottants**, plus aucun conteneur/scroll de page :
+  `MissionPage.tsx` n'a plus de `<main>` scrollable — tout est `absolute` par-dessus `MissionMap`
+  (`absolute inset-0`). Composants renommés/remplacés en conséquence (ancien → nouveau) :
+  `MissionHeaderBar` → `MissionTopOverlay` (bandeau flottant, plus de bande pleine largeur) ;
+  `MissionFooter` → `MapFloatingButtons` (3 gros boutons ronds à droite : Navigation/Problème/
+  Options, fidèle au texte de la maquette) ; `StopListHeader`+`MissionCountersRow` →
+  `StopListDrawer` (tiroir rétractable, 3 résidences visibles repliées, dépliable par tap/drag).
+  **Décision de portée** (`MissionCountersRow` n'a pas d'équivalent texte/image) : fusionné dans
+  l'en-tête du tiroir plutôt que supprimé, pour ne pas perdre l'info terminées/à reprendre.
+- **Compteur intelligent isolé** (`SmartCounter`, nouveau `variant="floating"`) : gros, coloré
+  selon l'état (vert/orange/bleu/rouge via `TONE_CLASSES` existant, aucun nouveau mapping de
+  couleur), **seul** en haut-droite — la bascule vocale rapide (mute) est volontairement une
+  petite icône **séparée**, pas collée au compteur, pour respecter « aucun autre élément autour »
+  du texte tout en conservant la fonctionnalité (décidée utile en tache4).
+- **Menu de développement de nouveau caché** : la section « Contrôle manuel » (Play/Pause/Stop)
+  de `MissionOptionsSheet` est de nouveau gardée par `config.devControls` (elle ne l'était plus
+  depuis tache4, qui en avait fait un point d'entrée production sans gating). Cette tâche
+  **réintroduit** le gating car le texte de `design3.txt` est explicite (« menu de développement
+  caché », « aucun bouton technique » en interface finale). `config.devControls` reste `true` par
+  défaut dans `domain/config.ts` (non changé par cette tâche) : à mettre à `false` pour un vrai
+  déploiement terrain sans ces boutons.
+- **Glassmorphism** : toutes les cartes flottantes (`MissionTopOverlay`, `SmartCounter
+  variant="floating"`, `CurrentMissionCard`, `StopListDrawer`, `MapControls`, `CompassBadge`)
+  utilisent `bg-surface-card/NN` + `backdrop-blur-md` + `border-white/10` plutôt que les surfaces
+  opaques `bg-surface-card`/`border-border-subtle` d'avant — cohérent avec l'effet « verre léger »
+  demandé. Pas de nouveaux tokens `@theme` : opacité + blur suffisent avec les couleurs existantes.
+- ⚠️ **Non vérifié en direct dans un navigateur** (même limitation que tache4 : pas de compte de
+  test/serveur dans cette session). `tsc -b`/`eslint`/`npm run build` propres seulement. À valider
+  manuellement en priorité : fluidité de `map.easeTo` répété à chaque fix GPS (pas de saccades),
+  geste de glissement du tiroir vs tap (ne doivent pas se percuter), lisibilité du texte flottant
+  par-dessus une carte satellite claire (bascule de style).
+
+## Suivi (2026-07-29, suite) — Bug carte invisible + outillage Playwright pour vérification visuelle
+
+- **`MissionMap.tsx` codait en dur `relative overflow-hidden`** puis concaténait le `className` de
+  l'appelant sans jamais l'avoir remis en question depuis que tache6 lui passe `absolute inset-0`
+  (plein écran). `.relative`/`.absolute` sur le même élément → conflit gagné par `.relative` (déclaré
+  après `.absolute` dans le CSS généré par Tailwind, même spécificité) → la carte ne remplissait
+  plus l'écran, elle s'effondrait à ~28px (hauteur de l'attribution Mapbox). **Règle à retenir** :
+  ne **jamais** figer une classe `position:*` en dur dans un composant si l'appelant peut aussi en
+  passer une via `className` — laisser l'appelant la fournir entièrement, sinon Tailwind ne garantit
+  aucun ordre de priorité entre deux utilitaires de même spécificité qui se contredisent.
+- **Couche z-index des contrôles flottants** : `MissionTopOverlay`, `MapFloatingButtons`,
+  `DevPanelTrigger`, `MapControls`, `CompassBadge` sont tous `z-30` (« chrome » toujours visible) ;
+  la pile de cartes du bas (`CurrentMissionCard`/`StopListDrawer`/bannières) reste `z-20` (« contenu »).
+  Règle établie par ce bugfix : ne jamais remettre du contenu à `z-30` ou plus sans une bonne raison,
+  sinon il recouvrira les boutons persistants.
+- **Playwright installé en devDependency** (+ Chromium headless via `npx playwright install
+  --with-deps chromium`) pour permettre une vérification visuelle réelle sur ce VPS **sans GUI**.
+  L'extension navigateur « Claude in Chrome » ne fonctionne **pas** ici : elle exige un vrai Chrome
+  avec l'extension sur la **même machine** que la session Claude Code (connexion locale) — inutile
+  quand Chrome est sur l'ordinateur personnel de l'utilisateur et Claude Code sur ce VPS distant.
+  Playwright, lui, lance son propre navigateur headless, sans dépendance à une session utilisateur.
+- ⚠️ **Piège de ports sur ce VPS partagé** : `127.0.0.1:3030` répond mais c'est le process **PM2**
+  de production (`pm2 list` → `reca-operator`, sert `dist/`), pas un `npm run dev`. Un `npm run dev`
+  lancé alors que 3030/3031 sont déjà occupés (par PM2 et/ou un autre process vite résiduel) atterrit
+  sur le port suivant disponible (3032 rencontré) — **toujours vérifier `ss -ltnp`/`pm2 list` et lire
+  le log de démarrage de Vite** avant de pointer un outil de test sur un port « par défaut ».
+- **Prod PM2 mise à jour (2026-07-29)** : après accord explicite de l'utilisateur, `npm run build` +
+  `pm2 restart reca-operator` — le port 3030 sert désormais le bundle avec le correctif carte
+  (vérifié : `index-BvdCb9vU.js` servi par `curl http://127.0.0.1:3030/`).
 
 ## Essayé / rejeté
 
